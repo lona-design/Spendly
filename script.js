@@ -1,202 +1,166 @@
 /**
- * PocketLog — Calm, Premium, Refined Daily Expense Tracker
- * Vanilla JavaScript Implementation
+ * PocketLog — daily expense tracker
+ * Vanilla JavaScript. Data lives in localStorage under STORAGE_KEY.
  */
 
 (() => {
   'use strict';
 
-  // --- Constants & Configuration ---
+  // --- Constants -----------------------------------------------------------
+
   const STORAGE_KEY = 'pocketlog_expenses';
   const VALID_CATEGORIES = ['Food', 'Transport', 'Shopping', 'Bills', 'Health', 'Other'];
 
-  // --- Application State ---
+  // Small outline icons (24px grid, stroke 2) for category badges
+  const ICON_TAG = '<path d="M12.59 2.59A2 2 0 0 0 11.17 2H4a2 2 0 0 0-2 2v7.17a2 2 0 0 0 .59 1.42l8.7 8.7a2.43 2.43 0 0 0 3.42 0l6.58-6.58a2.43 2.43 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r="1"/>';
+  const CATEGORY_META = {
+    Food: { cls: 'cat-food', icon: '<path d="M3 2v7a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6a2 2 0 0 0 2 2h3zm0 0v7"/>' },
+    Transport: { cls: 'cat-transport', icon: '<rect x="4" y="3" width="16" height="15" rx="3"/><path d="M4 11h16"/><path d="M8 18v3"/><path d="M16 18v3"/><circle cx="8" cy="14.5" r=".5"/><circle cx="16" cy="14.5" r=".5"/>' },
+    Shopping: { cls: 'cat-shopping', icon: '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>' },
+    Bills: { cls: 'cat-bills', icon: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/>' },
+    Health: { cls: 'cat-health', icon: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/>' },
+    Other: { cls: 'cat-other', icon: ICON_TAG }
+  };
+
+  const TOAST_ICONS = {
+    success: '<polyline points="20 6 9 17 4 12"/>',
+    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+    error: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'
+  };
+
+  const DOTS_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/></svg>';
+
+  // --- State ---------------------------------------------------------------
+
   let expenses = [];
+  let storageLocked = false;      // true if existing data could not be read; protects it from being overwritten
   let editingExpenseId = null;
   let pendingDeleteId = null;
   let lastFocusedTrigger = null;
   let initialFormValues = null;
+  let isSubmitting = false;
+  let menuTrigger = null;
+  let menuExpenseId = null;
 
-  // --- DOM Elements ---
+  // --- DOM -----------------------------------------------------------------
 
-  // Summary Metrics (Global scope, independent of filters)
-  const monthAmountEl = document.getElementById('month-amount');
-  const monthPeriodLabelEl = document.getElementById('month-period-label');
-  const alltimeAmountEl = document.getElementById('alltime-amount');
-  const totalCountEl = document.getElementById('total-count');
+  const $ = (id) => document.getElementById(id);
 
-  // Expenses Section & Results Subtotal
-  const resultsCountEl = document.getElementById('results-count');
-  const resultsSubtotalEl = document.getElementById('results-subtotal');
-  const searchInput = document.getElementById('search-input');
-  const clearSearchBtn = document.getElementById('clear-search-btn');
-  const filterCategorySelect = document.getElementById('filter-category');
-  const filterDateSelect = document.getElementById('filter-date');
+  const monthAmountEl = $('month-amount');
+  const monthPeriodLabelEl = $('month-period-label');
+  const alltimeAmountEl = $('alltime-amount');
+  const totalCountEl = $('total-count');
 
-  // Custom Date Range Sub-controls
-  const customDateContainer = document.getElementById('custom-date-container');
-  const customDateStartInput = document.getElementById('custom-date-start');
-  const customDateEndInput = document.getElementById('custom-date-end');
-  const customDateErrorEl = document.getElementById('custom-date-error');
-  const filterStatusBar = document.getElementById('filter-status-bar');
-  const resetAllFiltersBtn = document.getElementById('reset-all-filters-btn');
+  const resultsMetaEl = $('results-meta');
+  const resultsCountEl = $('results-count');
+  const resultsSubtotalEl = $('results-subtotal');
+  const toolbarEl = $('toolbar');
+  const searchInput = $('search-input');
+  const clearSearchBtn = $('clear-search-btn');
+  const filterCategorySelect = $('filter-category');
+  const filterDateSelect = $('filter-date');
+  const clearFiltersBtn = $('clear-filters-btn');
+  const customDateContainer = $('custom-date-container');
+  const customDateStartInput = $('custom-date-start');
+  const customDateEndInput = $('custom-date-end');
+  const customDateErrorEl = $('custom-date-error');
 
-  // List & State Containers
-  const desktopListHeader = document.getElementById('desktop-list-header');
-  const expenseListEl = document.getElementById('expense-list');
-  const emptyStateEl = document.getElementById('empty-state');
-  const noResultsStateEl = document.getElementById('no-results-state');
-  const emptyStateAddBtn = document.getElementById('empty-state-add-btn');
-  const noResultsClearBtn = document.getElementById('no-results-clear-btn');
+  const tableHeadEl = $('desktop-list-header');
+  const expenseListEl = $('expense-list');
+  const emptyStateEl = $('empty-state');
+  const noResultsStateEl = $('no-results-state');
+  const emptyStateAddBtn = $('empty-state-add-btn');
+  const noResultsClearBtn = $('no-results-clear-btn');
+  const openAddDialogBtn = $('open-add-dialog-btn');
 
-  // Header CTA Trigger
-  const openAddDialogBtn = document.getElementById('open-add-dialog-btn');
+  const menuEl = $('row-actions-menu');
+  const menuItems = Array.from(menuEl.querySelectorAll('[role="menuitem"]'));
 
-  // Add / Edit Dialog Elements
-  const expenseDialog = document.getElementById('expense-dialog');
-  const dialogTitleEl = document.getElementById('dialog-title');
-  const dialogCloseBtn = document.getElementById('dialog-close-btn');
-  const dialogCancelBtn = document.getElementById('dialog-cancel-btn');
-  const dialogSubmitBtn = document.getElementById('dialog-submit-btn');
-  const submitBtnText = document.getElementById('submit-btn-text');
-  const expenseForm = document.getElementById('expense-form');
+  const expenseDialog = $('expense-dialog');
+  const dialogTitleEl = $('dialog-title');
+  const dialogCloseBtn = $('dialog-close-btn');
+  const dialogCancelBtn = $('dialog-cancel-btn');
+  const dialogSubmitBtn = $('dialog-submit-btn');
+  const submitBtnText = $('submit-btn-text');
+  const expenseForm = $('expense-form');
 
-  // Form Fields & Error Elements
-  const amountInput = document.getElementById('expense-amount');
-  const descInput = document.getElementById('expense-description');
-  const categorySelect = document.getElementById('expense-category');
-  const dateInput = document.getElementById('expense-date');
+  const amountInput = $('expense-amount');
+  const descInput = $('expense-description');
+  const categorySelect = $('expense-category');
+  const dateInput = $('expense-date');
+  const FIELD_ERRORS = [
+    [amountInput, $('amount-error')],
+    [descInput, $('desc-error')],
+    [categorySelect, $('category-error')],
+    [dateInput, $('date-error')]
+  ];
 
-  const amountErrorEl = document.getElementById('amount-error');
-  const descErrorEl = document.getElementById('desc-error');
-  const categoryErrorEl = document.getElementById('category-error');
-  const dateErrorEl = document.getElementById('date-error');
+  const deleteDialog = $('delete-dialog');
+  const deletePreviewContent = $('delete-preview-content');
+  const deleteCancelBtn = $('delete-cancel-btn');
+  const deleteConfirmBtn = $('delete-confirm-btn');
 
-  // Delete Confirmation Dialog Elements
-  const deleteDialog = document.getElementById('delete-dialog');
-  const deletePreviewContent = document.getElementById('delete-preview-content');
-  const deleteCancelBtn = document.getElementById('delete-cancel-btn');
-  const deleteConfirmBtn = document.getElementById('delete-confirm-btn');
+  const discardDialog = $('discard-dialog');
+  const discardStayBtn = $('discard-stay-btn');
+  const discardConfirmBtn = $('discard-confirm-btn');
 
-  // Unsaved Changes Discard Dialog Elements
-  const discardDialog = document.getElementById('discard-dialog');
-  const discardStayBtn = document.getElementById('discard-stay-btn');
-  const discardConfirmBtn = document.getElementById('discard-confirm-btn');
+  const toastRegion = $('toast-region');
+  const alertRegion = $('alert-region');
 
-  // Toast Container
-  const toastRegion = document.getElementById('toast-region');
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-  // --- Utility Functions ---
+  // --- Utilities -----------------------------------------------------------
 
-  /**
-   * Return today's date in local calendar 'YYYY-MM-DD' format.
-   * Avoids UTC shift bugs by reading local year, month, day.
-   */
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  /** Local calendar date as 'YYYY-MM-DD' (no UTC shift). */
   function getTodayDateString() {
     const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
   }
 
-  /**
-   * Return 'YYYY-MM' for the current local calendar month.
-   */
   function getCurrentMonthPrefix() {
     const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    return `${y}-${m}`;
+    return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
   }
 
-  /**
-   * Return 'YYYY-MM' for the previous local calendar month.
-   */
   function getLastMonthPrefix() {
     const now = new Date();
     let y = now.getFullYear();
-    let m = now.getMonth(); // 0-indexed, so 0 (Jan) becomes month 12 of y-1
-    if (m === 0) {
-      m = 12;
-      y -= 1;
-    }
-    return `${y}-${String(m).padStart(2, '0')}`;
+    let m = now.getMonth(); // previous month, 1-based
+    if (m === 0) { m = 12; y -= 1; }
+    return `${y}-${pad2(m)}`;
   }
 
-  /**
-   * Format month prefix ('YYYY-MM') to readable text, e.g. "November 2026".
-   */
+  /** True for a real calendar date in 'YYYY-MM-DD' form. */
+  function isValidDateString(str) {
+    if (typeof str !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(str)) return false;
+    const [y, m, d] = str.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+  }
+
   function formatMonthYearLabel(prefix) {
-    if (!prefix) return '';
-    const parts = prefix.split('-');
-    if (parts.length !== 2) return prefix;
-    const y = parseInt(parts[0], 10);
-    const m = parseInt(parts[1], 10) - 1;
-    const d = new Date(y, m, 1);
-    return d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    const [y, m] = prefix.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
   }
 
-  /**
-   * Convert currency amount to integer paise to prevent floating-point calculation errors.
-   */
-  function toPaise(amt) {
-    return Math.round((Number(amt) || 0) * 100);
-  }
+  // Money in integer paise to avoid floating-point artifacts
+  const toPaise = (amt) => Math.round((Number(amt) || 0) * 100);
+  const sumExpenses = (list) => list.reduce((acc, item) => acc + toPaise(item.amount), 0) / 100;
 
-  /**
-   * Convert integer paise back to float.
-   */
-  function fromPaise(paise) {
-    return paise / 100;
-  }
-
-  /**
-   * Sum an array of expense records with floating-point precision safety.
-   */
-  function sumExpenses(list) {
-    if (!list || !list.length) return 0;
-    const totalPaise = list.reduce((acc, item) => acc + toPaise(item.amount), 0);
-    return fromPaise(totalPaise);
-  }
-
-  /**
-   * Format a numeric amount to Indian Rupee standard format (e.g. ₹1,250.00).
-   */
   function formatINR(amount) {
-    const num = Number(amount) || 0;
-    return '₹' + num.toLocaleString('en-IN', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
+    return '₹' + (Number(amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  /**
-   * Format 'YYYY-MM-DD' into readable date, e.g. "06 Nov 2026".
-   */
   function formatDateDisplay(dateStr) {
-    if (!dateStr) return '';
-    const parts = dateStr.split('-');
-    if (parts.length !== 3) return dateStr;
-    const y = parseInt(parts[0], 10);
-    const m = parseInt(parts[1], 10) - 1;
-    const d = parseInt(parts[2], 10);
-    const dateObj = new Date(y, m, d);
-
-    if (isNaN(dateObj.getTime())) return dateStr;
-
-    return dateObj.toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    });
+    if (!isValidDateString(dateStr)) return dateStr || '';
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
-  /**
-   * Escape HTML strings when rendering dynamically to prevent XSS.
-   */
   function escapeHtml(str) {
-    return String(str || '')
+    return String(str ?? '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -204,312 +168,245 @@
       .replace(/'/g, '&#039;');
   }
 
-  // --- LocalStorage Management (Graceful failure handling) ---
+  const generateId = () => 'exp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+
+  function categoryBadge(category) {
+    const meta = CATEGORY_META[category];
+    const cls = meta ? meta.cls : 'cat-unknown';
+    const icon = meta ? meta.icon : ICON_TAG;
+    return `<span class="category-badge ${cls}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg><span>${escapeHtml(category)}</span></span>`;
+  }
+
+  const isVisible = (el) => Boolean(el && document.contains(el) && el.offsetParent !== null);
+
+  // --- Storage -------------------------------------------------------------
+
+  /** Normalise a stored record for display while keeping every saved field. */
+  function normaliseRecord(item) {
+    return {
+      ...item,
+      id: item.id || generateId(),
+      description: String(item.description ?? ''),
+      amount: Math.abs(parseFloat(Number(item.amount).toFixed(2))) || 0,
+      // Unknown categories are kept exactly as saved and shown with a neutral badge
+      category: typeof item.category === 'string' && item.category ? item.category : 'Other',
+      date: typeof item.date === 'string' && item.date ? item.date : getTodayDateString(),
+      createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now()
+    };
+  }
 
   function loadExpenses() {
+    let raw;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) {
-        expenses = [];
-        return;
-      }
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        // Backward-compatible schema validation: preserve IDs and timestamps
-        expenses = parsed.map((item) => ({
-          id: item.id || ('exp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7)),
-          description: String(item.description || ''),
-          amount: Math.abs(parseFloat(Number(item.amount).toFixed(2))) || 0,
-          category: VALID_CATEGORIES.includes(item.category) ? item.category : 'Other',
-          date: item.date || getTodayDateString(),
-          createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now()
-        }));
-      } else {
-        expenses = [];
-      }
+      raw = localStorage.getItem(STORAGE_KEY);
     } catch (err) {
-      console.error('Failed to parse expenses from localStorage:', err);
-      showToast('Could not read existing expenses from browser storage.', null, null, 'error');
+      console.error('localStorage is unavailable:', err);
+      storageLocked = true;
       expenses = [];
+      showToast('This browser is blocking storage, so expenses can’t be saved here.', { type: 'error' });
+      return;
+    }
+
+    if (!raw) {
+      expenses = [];
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || !parsed.every((i) => i && typeof i === 'object')) {
+        throw new Error('Unexpected data format');
+      }
+      expenses = parsed.map(normaliseRecord);
+    } catch (err) {
+      // Never overwrite data we couldn't read
+      console.error('Failed to read saved expenses:', err);
+      storageLocked = true;
+      expenses = [];
+      showToast('Your saved expenses couldn’t be read. To protect them, new changes won’t be saved.', { type: 'error' });
     }
   }
 
-  function saveExpenses() {
+  /** Persist a new list. Returns true only if the write succeeded. */
+  function persist(nextExpenses) {
+    if (storageLocked) {
+      showToast('Changes weren’t saved because existing data in this browser couldn’t be read.', { type: 'error' });
+      return false;
+    }
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextExpenses));
+      expenses = nextExpenses;
       return true;
     } catch (err) {
-      console.error('Failed to save expenses to localStorage:', err);
-      showToast('Storage full or restricted. Changes could not be saved to this browser.', null, null, 'error');
+      console.error('Failed to save expenses:', err);
+      showToast('Couldn’t save. Browser storage may be full or restricted.', { type: 'error' });
       return false;
     }
   }
 
-  // --- Toast Notification Region (Status messages, aria-live="polite") ---
+  // --- Toasts --------------------------------------------------------------
 
   /**
-   * Show a non-blocking toast notification.
+   * Show a status message. Success/info messages auto-dismiss;
+   * errors stay until dismissed.
    */
-  // Inline SVG paths for toast icons (feedback never relies on colour alone)
-  const TOAST_ICONS = {
-    success: '<polyline points="20 6 9 17 4 12"></polyline>',
-    error: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>',
-    info: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>'
-  };
-
-  function showToast(message, actionLabel = null, actionCallback = null, type = 'info', duration = 4000) {
+  function showToast(message, { type = 'success', actionLabel = null, onAction = null, duration = 4000 } = {}) {
+    const isError = type === 'error';
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
-    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    toast.innerHTML = `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TOAST_ICONS[type] || TOAST_ICONS.info}</svg>`;
 
-    toast.insertAdjacentHTML(
-      'beforeend',
-      `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TOAST_ICONS[type] || TOAST_ICONS.info}</svg>`
-    );
+    const msg = document.createElement('span');
+    msg.className = 'toast-message';
+    msg.textContent = message;
+    toast.appendChild(msg);
 
-    const msgSpan = document.createElement('span');
-    msgSpan.className = 'toast-message';
-    msgSpan.textContent = message;
-    toast.appendChild(msgSpan);
-
-    if (actionLabel && typeof actionCallback === 'function') {
-      const actionBtn = document.createElement('button');
-      actionBtn.type = 'button';
-      actionBtn.className = 'btn btn-ghost btn-sm toast-action-btn';
-      actionBtn.textContent = actionLabel;
-      actionBtn.addEventListener('click', () => {
-        actionCallback();
-        removeToast(toast);
-      });
-      toast.appendChild(actionBtn);
-    }
-
-    toastRegion.appendChild(toast);
-
-    const timer = setTimeout(() => {
-      removeToast(toast);
-    }, duration);
-
-    function removeToast(el) {
+    let timer = null;
+    const remove = () => {
       clearTimeout(timer);
-      if (!el.parentNode) return;
-      el.style.transition = 'opacity 0.16s ease';
-      el.style.opacity = '0';
-      setTimeout(() => {
-        if (el.parentNode) {
-          el.parentNode.removeChild(el);
-        }
-      }, 180);
+      if (!toast.parentNode) return;
+      toast.style.transition = 'opacity 0.16s ease';
+      toast.style.opacity = '0';
+      setTimeout(() => toast.remove(), 170);
+    };
+
+    if (actionLabel && typeof onAction === 'function') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-secondary';
+      btn.textContent = actionLabel;
+      btn.addEventListener('click', () => { onAction(); remove(); });
+      toast.appendChild(btn);
     }
+
+    if (isError) {
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'btn-icon';
+      close.setAttribute('aria-label', 'Dismiss message');
+      close.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      close.addEventListener('click', remove);
+      toast.appendChild(close);
+    } else {
+      timer = setTimeout(remove, duration);
+    }
+
+    (isError ? alertRegion : toastRegion).appendChild(toast);
   }
 
-  // --- Summary Metrics (All-time and Current Month) ---
+  // --- Summary (global; ignores list filters) ------------------------------
 
-  /**
-   * Update top summary cards.
-   * Defined from ALL saved expenses regardless of list filters.
-   */
+  let metricsReady = false; // no highlight on the first render
+
+  /** Write a metric's final value immediately; briefly highlight it only if it changed. */
+  function setMetric(el, text) {
+    if (el.textContent === text) return;
+    el.textContent = text;
+    if (!metricsReady || prefersReducedMotion.matches) return;
+    el.classList.remove('metric-changed');
+    void el.offsetWidth; // restart the animation if it's already running
+    el.classList.add('metric-changed');
+  }
+
   function updateSummaryMetrics() {
     const currentMonth = getCurrentMonthPrefix();
-    const currentMonthExpenses = expenses.filter((item) => item.date.startsWith(currentMonth));
+    const monthExpenses = expenses.filter((item) => item.date.startsWith(currentMonth));
 
-    const monthTotal = sumExpenses(currentMonthExpenses);
-    const alltimeTotal = sumExpenses(expenses);
-    const countTotal = expenses.length;
-
-    monthAmountEl.textContent = formatINR(monthTotal);
+    setMetric(monthAmountEl, formatINR(sumExpenses(monthExpenses)));
     monthPeriodLabelEl.textContent = formatMonthYearLabel(currentMonth);
-
-    alltimeAmountEl.textContent = formatINR(alltimeTotal);
-    totalCountEl.textContent = countTotal.toLocaleString('en-IN');
+    setMetric(alltimeAmountEl, formatINR(sumExpenses(expenses)));
+    setMetric(totalCountEl, expenses.length.toLocaleString('en-IN'));
   }
 
-  // --- Filtering & Sorting ---
+  [monthAmountEl, alltimeAmountEl, totalCountEl].forEach((el) => {
+    el.addEventListener('animationend', () => el.classList.remove('metric-changed'));
+  });
+
+  // --- Filtering -----------------------------------------------------------
 
   function isFilterActive() {
-    const hasSearch = searchInput.value.trim().length > 0;
-    const hasCategory = filterCategorySelect.value !== 'ALL';
-    const hasDate = filterDateSelect.value !== 'ALL';
-    return hasSearch || hasCategory || hasDate;
+    return searchInput.value.trim().length > 0 ||
+      filterCategorySelect.value !== 'ALL' ||
+      filterDateSelect.value !== 'ALL';
   }
 
-  function getFilteredAndSortedExpenses() {
-    const searchQuery = searchInput.value.trim().toLowerCase();
-    const selectedCategory = filterCategorySelect.value;
-    const selectedDateMode = filterDateSelect.value;
+  function matchesFilters(item) {
+    const query = searchInput.value.trim().toLowerCase();
+    const category = filterCategorySelect.value;
+    const dateMode = filterDateSelect.value;
 
-    const currentMonth = getCurrentMonthPrefix();
-    const lastMonth = getLastMonthPrefix();
+    if (query && !item.description.toLowerCase().includes(query)) return false;
+    if (category !== 'ALL' && item.category !== category) return false;
 
-    const customStart = customDateStartInput.value;
-    const customEnd = customDateEndInput.value;
-
-    return expenses
-      .filter((item) => {
-        // 1. Description Search Match (case-insensitive substring)
-        if (searchQuery && !item.description.toLowerCase().includes(searchQuery)) {
-          return false;
-        }
-
-        // 2. Category Match
-        if (selectedCategory !== 'ALL' && item.category !== selectedCategory) {
-          return false;
-        }
-
-        // 3. Date Range Match
-        if (selectedDateMode === 'THIS_MONTH') {
-          if (!item.date.startsWith(currentMonth)) return false;
-        } else if (selectedDateMode === 'LAST_MONTH') {
-          if (!item.date.startsWith(lastMonth)) return false;
-        } else if (selectedDateMode === 'CUSTOM') {
-          if (customStart && item.date < customStart) return false;
-          if (customEnd && item.date > customEnd) return false;
-        }
-
-        return true;
-      })
-      .sort((a, b) => {
-        // Newest date first
-        const dateDiff = b.date.localeCompare(a.date);
-        if (dateDiff !== 0) return dateDiff;
-        // Secondary sort: newest added first
-        return (b.createdAt || 0) - (a.createdAt || 0);
-      });
-  }
-
-  /**
-   * Check if a specific expense matches the currently active search & filters.
-   */
-  function doesExpenseMatchActiveFilters(item) {
-    const searchQuery = searchInput.value.trim().toLowerCase();
-    const selectedCategory = filterCategorySelect.value;
-    const selectedDateMode = filterDateSelect.value;
-    const currentMonth = getCurrentMonthPrefix();
-    const lastMonth = getLastMonthPrefix();
-    const customStart = customDateStartInput.value;
-    const customEnd = customDateEndInput.value;
-
-    if (searchQuery && !item.description.toLowerCase().includes(searchQuery)) return false;
-    if (selectedCategory !== 'ALL' && item.category !== selectedCategory) return false;
-
-    if (selectedDateMode === 'THIS_MONTH' && !item.date.startsWith(currentMonth)) return false;
-    if (selectedDateMode === 'LAST_MONTH' && !item.date.startsWith(lastMonth)) return false;
-    if (selectedDateMode === 'CUSTOM') {
-      if (customStart && item.date < customStart) return false;
-      if (customEnd && item.date > customEnd) return false;
+    if (dateMode === 'THIS_MONTH' && !item.date.startsWith(getCurrentMonthPrefix())) return false;
+    if (dateMode === 'LAST_MONTH' && !item.date.startsWith(getLastMonthPrefix())) return false;
+    if (dateMode === 'CUSTOM') {
+      const start = customDateStartInput.value;
+      const end = customDateEndInput.value;
+      if (start && item.date < start) return false; // boundaries inclusive
+      if (end && item.date > end) return false;
     }
-
     return true;
   }
 
-  // --- Rendering Expenses List ---
+  function getFilteredAndSortedExpenses() {
+    return expenses
+      .filter(matchesFilters)
+      .sort((a, b) =>
+        b.date.localeCompare(a.date) ||
+        (b.createdAt || 0) - (a.createdAt || 0) ||
+        String(a.id).localeCompare(String(b.id))
+      );
+  }
+
+  // --- Rendering -----------------------------------------------------------
+
+  function renderRow(expense) {
+    const desc = escapeHtml(expense.description);
+    const id = escapeHtml(expense.id);
+    return `
+      <li class="expense-item" data-id="${id}">
+        <div class="cell-desc">${desc}</div>
+        <div class="cell-meta">
+          <div class="cell-category">${categoryBadge(expense.category)}</div>
+          <div class="cell-date"><time datetime="${escapeHtml(expense.date)}">${escapeHtml(formatDateDisplay(expense.date))}</time></div>
+        </div>
+        <div class="cell-amount">${formatINR(expense.amount)}</div>
+        <div class="cell-actions">
+          <button type="button" class="menu-trigger" data-id="${id}"
+            aria-haspopup="menu" aria-expanded="false" aria-controls="row-actions-menu"
+            aria-label="Actions for ${desc}">${DOTS_ICON}</button>
+        </div>
+      </li>`;
+  }
 
   function renderList() {
+    closeMenu(false);
+
     const hasAnyExpenses = expenses.length > 0;
     const filtered = getFilteredAndSortedExpenses();
-    const hasFilteredResults = filtered.length > 0;
     const filterActive = isFilterActive();
 
-    // Toggle clear search button
-    if (searchInput.value.trim().length > 0) {
-      clearSearchBtn.classList.remove('hidden');
-    } else {
-      clearSearchBtn.classList.add('hidden');
-    }
+    // Toolbar state
+    clearSearchBtn.classList.toggle('hidden', searchInput.value.length === 0);
+    clearFiltersBtn.classList.toggle('hidden', !filterActive);
+    searchInput.closest('.field').classList.toggle('is-active', searchInput.value.trim().length > 0);
+    filterCategorySelect.closest('.field').classList.toggle('is-active', filterCategorySelect.value !== 'ALL');
+    filterDateSelect.closest('.field').classList.toggle('is-active', filterDateSelect.value !== 'ALL');
 
-    // Mark individual filter fields as selected (plum styling hook)
-    searchInput.closest('.filter-field').classList.toggle('is-active', searchInput.value.trim().length > 0);
-    filterCategorySelect.closest('.filter-field').classList.toggle('is-active', filterCategorySelect.value !== 'ALL');
-    filterDateSelect.closest('.filter-field').classList.toggle('is-active', filterDateSelect.value !== 'ALL');
+    // First use: no toolbar or results line, just the welcome state
+    toolbarEl.classList.toggle('hidden', !hasAnyExpenses);
+    resultsMetaEl.classList.toggle('hidden', !hasAnyExpenses);
 
-    // Toggle active filter status bar
-    if (filterActive) {
-      filterStatusBar.classList.remove('hidden');
-    } else {
-      filterStatusBar.classList.add('hidden');
-    }
+    const n = filtered.length;
+    resultsCountEl.textContent = `${n.toLocaleString('en-IN')} ${n === 1 ? 'expense' : 'expenses'}`;
+    resultsSubtotalEl.textContent = formatINR(sumExpenses(filtered));
 
-    // Update Results Subtotal and Count
-    const filteredSubtotal = sumExpenses(filtered);
-    resultsCountEl.textContent = `${filtered.length} matching ${filtered.length === 1 ? 'expense' : 'expenses'}`;
-    resultsSubtotalEl.textContent = formatINR(filteredSubtotal);
-
-    // View States:
-    // Case 1: No saved expenses at all in the entire app
-    if (!hasAnyExpenses) {
-      desktopListHeader.classList.add('hidden');
-      expenseListEl.innerHTML = '';
-      expenseListEl.classList.add('hidden');
-      noResultsStateEl.classList.add('hidden');
-      emptyStateEl.classList.remove('hidden');
-      return;
-    }
-
-    // Case 2: Saved expenses exist, but active filters yield 0 records
-    if (!hasFilteredResults) {
-      desktopListHeader.classList.add('hidden');
-      expenseListEl.innerHTML = '';
-      expenseListEl.classList.add('hidden');
-      emptyStateEl.classList.add('hidden');
-      noResultsStateEl.classList.remove('hidden');
-      return;
-    }
-
-    // Case 3: Matching expenses exist
-    emptyStateEl.classList.add('hidden');
-    noResultsStateEl.classList.add('hidden');
-    desktopListHeader.classList.remove('hidden');
-    expenseListEl.classList.remove('hidden');
-    expenseListEl.innerHTML = '';
-
-    filtered.forEach((expense) => {
-      const li = document.createElement('li');
-      li.className = 'expense-item';
-      li.dataset.id = expense.id;
-
-      li.innerHTML = `
-        <div class="col-desc">
-          <span class="desc-text">${escapeHtml(expense.description)}</span>
-        </div>
-
-        <div class="col-meta-wrapper">
-          <div class="col-cat">
-            <span class="category-badge">
-              ${escapeHtml(expense.category)}
-            </span>
-          </div>
-          <div class="col-date">
-            <span>${formatDateDisplay(expense.date)}</span>
-          </div>
-        </div>
-
-        <div class="col-amount">
-          <span>${formatINR(expense.amount)}</span>
-        </div>
-
-        <div class="col-actions">
-          <button type="button" class="btn btn-ghost btn-sm" data-action="edit" data-id="${expense.id}" aria-label="Edit expense: ${escapeHtml(expense.description)}">
-            Edit
-          </button>
-          <button type="button" class="btn btn-danger-ghost btn-sm" data-action="delete" data-id="${expense.id}" aria-label="Delete expense: ${escapeHtml(expense.description)}">
-            Delete
-          </button>
-        </div>
-      `;
-
-      // Event Listeners for Edit & Delete buttons
-      const editBtn = li.querySelector('[data-action="edit"]');
-      const deleteBtn = li.querySelector('[data-action="delete"]');
-
-      if (editBtn) {
-        editBtn.addEventListener('click', () => openEditDialog(expense.id, editBtn));
-      }
-      if (deleteBtn) {
-        deleteBtn.addEventListener('click', () => openDeleteConfirmation(expense.id, deleteBtn));
-      }
-
-      expenseListEl.appendChild(li);
-    });
+    emptyStateEl.classList.toggle('hidden', hasAnyExpenses);
+    noResultsStateEl.classList.toggle('hidden', !hasAnyExpenses || n > 0);
+    tableHeadEl.classList.toggle('hidden', n === 0);
+    expenseListEl.classList.toggle('hidden', n === 0);
+    expenseListEl.innerHTML = filtered.map(renderRow).join('');
   }
 
   function refreshAll() {
@@ -517,7 +414,27 @@
     renderList();
   }
 
-  // --- Reset Filters ---
+  const findRowTrigger = (id) => expenseListEl.querySelector(`.menu-trigger[data-id="${CSS.escape(id)}"]`);
+
+  /** Move focus somewhere sensible when the previous target is gone. */
+  function focusFallback() {
+    if (isVisible(emptyStateAddBtn)) emptyStateAddBtn.focus();
+    else if (isVisible(noResultsClearBtn)) noResultsClearBtn.focus();
+    else openAddDialogBtn.focus();
+  }
+
+  // --- Filters -------------------------------------------------------------
+
+  function validateCustomRange() {
+    const start = customDateStartInput.value;
+    const end = customDateEndInput.value;
+    const invalid = Boolean(start && end && start > end);
+    customDateErrorEl.textContent = invalid ? 'The start date must be on or before the end date.' : '';
+    customDateStartInput.classList.toggle('is-invalid', invalid);
+    customDateEndInput.classList.toggle('is-invalid', invalid);
+    customDateStartInput.setAttribute('aria-invalid', String(invalid));
+    customDateEndInput.setAttribute('aria-invalid', String(invalid));
+  }
 
   function resetAllFilters() {
     searchInput.value = '';
@@ -525,508 +442,494 @@
     filterDateSelect.value = 'ALL';
     customDateStartInput.value = '';
     customDateEndInput.value = '';
-    customDateErrorEl.textContent = '';
+    validateCustomRange();
     customDateContainer.classList.add('hidden');
-    clearSearchBtn.classList.add('hidden');
     renderList();
   }
 
-  // --- Add / Edit Dialog Management ---
+  // --- Actions menu --------------------------------------------------------
 
-  function clearFormErrors() {
-    amountInput.classList.remove('is-invalid');
-    descInput.classList.remove('is-invalid');
-    categorySelect.classList.remove('is-invalid');
-    dateInput.classList.remove('is-invalid');
+  function positionMenu() {
+    if (!menuTrigger) return;
+    const rect = menuTrigger.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    const vh = window.innerHeight;
 
-    amountErrorEl.textContent = '';
-    descErrorEl.textContent = '';
-    categoryErrorEl.textContent = '';
-    dateErrorEl.textContent = '';
-  }
-
-  function recordInitialFormState() {
-    initialFormValues = {
-      amount: amountInput.value.trim(),
-      description: descInput.value.trim(),
-      category: categorySelect.value,
-      date: dateInput.value
-    };
-  }
-
-  function isFormDirty() {
-    if (!initialFormValues) return false;
-    return (
-      amountInput.value.trim() !== initialFormValues.amount ||
-      descInput.value.trim() !== initialFormValues.description ||
-      categorySelect.value !== initialFormValues.category ||
-      dateInput.value !== initialFormValues.date
-    );
-  }
-
-  function openAddDialog(triggerEl = null) {
-    lastFocusedTrigger = triggerEl || openAddDialogBtn;
-    editingExpenseId = null;
-
-    clearFormErrors();
-    expenseForm.reset();
-
-    // Set Default Values
-    dateInput.value = getTodayDateString();
-    categorySelect.value = '';
-
-    // Update Dialog UI
-    dialogTitleEl.textContent = 'Add expense';
-    submitBtnText.textContent = 'Save expense';
-    dialogSubmitBtn.disabled = false;
-
-    recordInitialFormState();
-
-    if (typeof expenseDialog.showModal === 'function') {
-      expenseDialog.showModal();
-    } else {
-      expenseDialog.setAttribute('open', '');
-    }
-
-    setTimeout(() => {
-      amountInput.focus();
-    }, 40);
-  }
-
-  function openEditDialog(id, triggerEl = null) {
-    const expense = expenses.find((item) => item.id === id);
-    if (!expense) return;
-
-    lastFocusedTrigger = triggerEl;
-    editingExpenseId = id;
-
-    clearFormErrors();
-
-    // Populate Fields
-    amountInput.value = Number(expense.amount).toFixed(2);
-    descInput.value = expense.description;
-    categorySelect.value = expense.category;
-    dateInput.value = expense.date;
-
-    // Update Dialog UI
-    dialogTitleEl.textContent = 'Edit expense';
-    submitBtnText.textContent = 'Save changes';
-    dialogSubmitBtn.disabled = false;
-
-    recordInitialFormState();
-
-    if (typeof expenseDialog.showModal === 'function') {
-      expenseDialog.showModal();
-    } else {
-      expenseDialog.setAttribute('open', '');
-    }
-
-    setTimeout(() => {
-      amountInput.focus();
-    }, 40);
-  }
-
-  function closeExpenseDialog(force = false) {
-    if (!force && isFormDirty()) {
-      openDiscardDialog();
+    // Anchor scrolled out of view: close rather than float detached
+    if (rect.bottom < 0 || rect.top > vh) {
+      closeMenu(false);
       return;
     }
 
-    if (typeof expenseDialog.close === 'function') {
-      expenseDialog.close();
-    } else {
-      expenseDialog.removeAttribute('open');
-    }
+    const gap = 4;
+    const margin = 8;
+    const mw = menuEl.offsetWidth;
+    const mh = menuEl.offsetHeight;
 
+    let top = rect.bottom + gap;
+    if (top + mh > vh - margin && rect.top - gap - mh >= margin) {
+      top = rect.top - gap - mh; // flip above
+    }
+    top = Math.max(margin, Math.min(top, vh - mh - margin));
+
+    let left = rect.right - mw;
+    left = Math.max(margin, Math.min(left, vw - mw - margin));
+
+    menuEl.style.top = `${Math.round(top)}px`;
+    menuEl.style.left = `${Math.round(left)}px`;
+    menuEl.dataset.placement = top < rect.top ? 'top' : 'bottom';
+  }
+
+  function openMenu(trigger, focusIndex = 0) {
+    if (menuTrigger && menuTrigger !== trigger) closeMenu(false);
+    menuTrigger = trigger;
+    menuExpenseId = trigger.dataset.id;
+    trigger.setAttribute('aria-expanded', 'true');
+    menuEl.setAttribute('aria-label', trigger.getAttribute('aria-label'));
+    menuEl.hidden = false;
+    positionMenu();
+    if (!menuTrigger) return; // closed during positioning
+    const index = focusIndex < 0 ? menuItems.length - 1 : focusIndex;
+    menuItems[index].focus();
+  }
+
+  function closeMenu(returnFocus) {
+    if (!menuTrigger) return;
+    const trigger = menuTrigger;
+    trigger.setAttribute('aria-expanded', 'false');
+    menuEl.hidden = true;
+    menuTrigger = null;
+    menuExpenseId = null;
+    if (returnFocus && document.contains(trigger)) trigger.focus();
+  }
+
+  expenseListEl.addEventListener('click', (e) => {
+    const trigger = e.target.closest('.menu-trigger');
+    if (!trigger) return;
+    if (menuTrigger === trigger) closeMenu(true);
+    else openMenu(trigger, 0);
+  });
+
+  expenseListEl.addEventListener('keydown', (e) => {
+    const trigger = e.target.closest('.menu-trigger');
+    if (!trigger) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      openMenu(trigger, 0);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      openMenu(trigger, -1);
+    }
+    // Enter / Space trigger a native click
+  });
+
+  menuEl.addEventListener('keydown', (e) => {
+    const index = menuItems.indexOf(document.activeElement);
+    const last = menuItems.length - 1;
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        menuItems[index >= last ? 0 : index + 1].focus();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        menuItems[index <= 0 ? last : index - 1].focus();
+        break;
+      case 'Home':
+        e.preventDefault();
+        menuItems[0].focus();
+        break;
+      case 'End':
+        e.preventDefault();
+        menuItems[last].focus();
+        break;
+      case 'Escape':
+        e.preventDefault();
+        closeMenu(true);
+        break;
+      case 'Tab':
+        // Return focus to the trigger, then let Tab continue from there
+        closeMenu(true);
+        break;
+      default:
+        break;
+    }
+  });
+
+  menuEl.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-menu-action]');
+    if (!item || !menuTrigger) return;
+    const id = menuExpenseId;
+    const trigger = menuTrigger;
+    closeMenu(false);
+    if (item.dataset.menuAction === 'edit') openEditDialog(id, trigger);
+    else openDeleteConfirmation(id, trigger);
+  });
+
+  document.addEventListener('pointerdown', (e) => {
+    if (!menuTrigger) return;
+    if (menuEl.contains(e.target) || menuTrigger.contains(e.target)) return;
+    closeMenu(false);
+  }, true);
+
+  window.addEventListener('scroll', positionMenu, true);
+  window.addEventListener('resize', positionMenu);
+
+  // --- Dialog helpers ------------------------------------------------------
+
+  function showDialog(dlg) {
+    if (typeof dlg.showModal === 'function') dlg.showModal();
+    else dlg.setAttribute('open', '');
+  }
+
+  function hideDialog(dlg) {
+    if (typeof dlg.close === 'function') dlg.close();
+    else dlg.removeAttribute('open');
+  }
+
+  // --- Add / Edit ----------------------------------------------------------
+
+  function clearFormErrors() {
+    FIELD_ERRORS.forEach(([input, errorEl]) => {
+      input.classList.remove('is-invalid');
+      input.removeAttribute('aria-invalid');
+      errorEl.textContent = '';
+    });
+  }
+
+  function setFieldError(input, message) {
+    const entry = FIELD_ERRORS.find(([el]) => el === input);
+    input.classList.add('is-invalid');
+    input.setAttribute('aria-invalid', 'true');
+    entry[1].textContent = message;
+  }
+
+  const readFormValues = () => ({
+    amount: amountInput.value.trim(),
+    description: descInput.value.trim(),
+    category: categorySelect.value,
+    date: dateInput.value
+  });
+
+  function isFormDirty() {
+    if (!initialFormValues) return false;
+    const now = readFormValues();
+    return Object.keys(now).some((k) => now[k] !== initialFormValues[k]);
+  }
+
+  function openFormDialog(triggerEl) {
+    lastFocusedTrigger = triggerEl;
+    isSubmitting = false;
+    dialogSubmitBtn.disabled = false;
+    initialFormValues = readFormValues();
+    showDialog(expenseDialog);
+    amountInput.focus();
+  }
+
+  function openAddDialog(triggerEl) {
+    editingExpenseId = null;
     clearFormErrors();
+    expenseForm.reset();
+    dateInput.value = getTodayDateString();
+    categorySelect.value = '';
+    dialogTitleEl.textContent = 'Add expense';
+    submitBtnText.textContent = 'Save expense';
+    openFormDialog(triggerEl || openAddDialogBtn);
+  }
+
+  function openEditDialog(id, triggerEl) {
+    const expense = expenses.find((item) => item.id === id);
+    if (!expense) return;
+    editingExpenseId = id;
+    clearFormErrors();
+    amountInput.value = Number(expense.amount).toFixed(2);
+    descInput.value = expense.description;
+    // An unrecognised saved category leaves the select empty so the user picks one
+    categorySelect.value = VALID_CATEGORIES.includes(expense.category) ? expense.category : '';
+    dateInput.value = expense.date;
+    dialogTitleEl.textContent = 'Edit expense';
+    submitBtnText.textContent = 'Save changes';
+    openFormDialog(triggerEl);
+  }
+
+  /** Close the form. Asks first if there are unsaved changes (unless forced). */
+  function closeExpenseDialog(force = false, restoreFocus = true) {
+    if (!force && isFormDirty()) {
+      showDialog(discardDialog);
+      discardStayBtn.focus();
+      return;
+    }
+    hideDialog(expenseDialog);
+    clearFormErrors();
+    const editedId = editingExpenseId;
     editingExpenseId = null;
     initialFormValues = null;
 
-    if (lastFocusedTrigger && typeof lastFocusedTrigger.focus === 'function') {
-      lastFocusedTrigger.focus();
-    }
+    if (!restoreFocus) return;
+    if (isVisible(lastFocusedTrigger)) lastFocusedTrigger.focus();
+    else if (editedId && findRowTrigger(editedId)) findRowTrigger(editedId).focus();
+    else focusFallback();
   }
-
-  // --- Unsaved Changes Guard Dialog ---
-
-  function openDiscardDialog() {
-    if (typeof discardDialog.showModal === 'function') {
-      discardDialog.showModal();
-    } else {
-      discardDialog.setAttribute('open', '');
-    }
-    setTimeout(() => {
-      discardStayBtn.focus();
-    }, 40);
-  }
-
-  function closeDiscardDialog() {
-    if (typeof discardDialog.close === 'function') {
-      discardDialog.close();
-    } else {
-      discardDialog.removeAttribute('open');
-    }
-  }
-
-  // --- Form Validation & Submission ---
 
   function validateExpenseForm() {
     clearFormErrors();
-    let isValid = true;
-    let firstInvalidField = null;
+    const invalid = [];
 
-    // 1. Amount Validation
-    const amountValRaw = amountInput.value.trim();
-    if (!amountValRaw) {
-      amountInput.classList.add('is-invalid');
-      amountErrorEl.textContent = 'Please enter an amount greater than ₹0.';
-      isValid = false;
-      firstInvalidField = firstInvalidField || amountInput;
-    } else {
-      const amountNum = Number(amountValRaw);
-      if (isNaN(amountNum) || !isFinite(amountNum) || amountNum <= 0) {
-        amountInput.classList.add('is-invalid');
-        amountErrorEl.textContent = 'Amount must be a valid number greater than ₹0.';
-        isValid = false;
-        firstInvalidField = firstInvalidField || amountInput;
-      } else {
-        const parts = amountValRaw.split('.');
-        if (parts.length > 1 && parts[1].length > 2) {
-          amountInput.classList.add('is-invalid');
-          amountErrorEl.textContent = 'Amount can have at most 2 decimal places.';
-          isValid = false;
-          firstInvalidField = firstInvalidField || amountInput;
-        }
-      }
+    const amountRaw = amountInput.value.trim();
+    const amountNum = Number(amountRaw);
+    if (!amountRaw) {
+      setFieldError(amountInput, 'Enter an amount greater than ₹0.');
+      invalid.push(amountInput);
+    } else if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      setFieldError(amountInput, 'Amount must be a number greater than ₹0.');
+      invalid.push(amountInput);
+    } else if ((amountRaw.split('.')[1] || '').length > 2) {
+      setFieldError(amountInput, 'Use at most 2 decimal places.');
+      invalid.push(amountInput);
     }
 
-    // 2. Description Validation
-    const descVal = descInput.value.trim();
-    if (!descVal) {
-      descInput.classList.add('is-invalid');
-      descErrorEl.textContent = 'Please enter a description.';
-      isValid = false;
-      firstInvalidField = firstInvalidField || descInput;
-    } else if (descVal.length > 120) {
-      descInput.classList.add('is-invalid');
-      descErrorEl.textContent = 'Description cannot exceed 120 characters.';
-      isValid = false;
-      firstInvalidField = firstInvalidField || descInput;
+    const desc = descInput.value.trim();
+    if (!desc) {
+      setFieldError(descInput, 'Enter a description.');
+      invalid.push(descInput);
+    } else if (desc.length > 120) {
+      setFieldError(descInput, 'Keep the description to 120 characters or fewer.');
+      invalid.push(descInput);
     }
 
-    // 3. Category Validation
-    const categoryVal = categorySelect.value;
-    if (!categoryVal || !VALID_CATEGORIES.includes(categoryVal)) {
-      categorySelect.classList.add('is-invalid');
-      categoryErrorEl.textContent = 'Please select a valid category.';
-      isValid = false;
-      firstInvalidField = firstInvalidField || categorySelect;
+    if (!VALID_CATEGORIES.includes(categorySelect.value)) {
+      setFieldError(categorySelect, 'Choose a category.');
+      invalid.push(categorySelect);
     }
 
-    // 4. Date Validation (Local calendar date)
-    const dateVal = dateInput.value;
-    if (!dateVal) {
-      dateInput.classList.add('is-invalid');
-      dateErrorEl.textContent = 'Please select a valid date.';
-      isValid = false;
-      firstInvalidField = firstInvalidField || dateInput;
-    } else {
-      const parts = dateVal.split('-');
-      if (parts.length !== 3 || isNaN(Date.parse(dateVal))) {
-        dateInput.classList.add('is-invalid');
-        dateErrorEl.textContent = 'Please enter a valid calendar date.';
-        isValid = false;
-        firstInvalidField = firstInvalidField || dateInput;
-      }
+    if (!dateInput.value) {
+      setFieldError(dateInput, 'Choose a date.');
+      invalid.push(dateInput);
+    } else if (!isValidDateString(dateInput.value)) {
+      setFieldError(dateInput, 'Enter a valid calendar date.');
+      invalid.push(dateInput);
     }
 
-    if (!isValid && firstInvalidField) {
-      firstInvalidField.focus();
-    }
+    if (invalid.length) invalid[0].focus();
+    return invalid.length === 0;
+  }
 
-    return isValid;
+  function highlightRow(id) {
+    const row = expenseListEl.querySelector(`.expense-item[data-id="${CSS.escape(id)}"]`);
+    if (!row) return;
+    row.classList.add('item-highlight');
+    row.scrollIntoView({ behavior: prefersReducedMotion.matches ? 'auto' : 'smooth', block: 'nearest' });
   }
 
   function handleFormSubmit(e) {
     e.preventDefault();
+    if (isSubmitting) return;
+    if (!validateExpenseForm()) return;
 
-    if (!validateExpenseForm()) {
-      return;
-    }
-
-    // Prevent accidental double submission
+    isSubmitting = true;
     dialogSubmitBtn.disabled = true;
 
-    const description = descInput.value.trim();
-    const amount = parseFloat(Number(amountInput.value).toFixed(2));
-    const category = categorySelect.value;
-    const date = dateInput.value;
+    const values = {
+      description: descInput.value.trim(),
+      amount: parseFloat(Number(amountInput.value).toFixed(2)),
+      category: categorySelect.value,
+      date: dateInput.value
+    };
 
-    let savedExpense = null;
-    let isEditMode = Boolean(editingExpenseId);
+    const isEdit = Boolean(editingExpenseId);
+    let saved;
+    let next;
 
-    if (isEditMode) {
-      const targetIndex = expenses.findIndex((item) => item.id === editingExpenseId);
-      if (targetIndex !== -1) {
-        expenses[targetIndex] = {
-          ...expenses[targetIndex],
-          description,
-          amount,
-          category,
-          date
-        };
-        savedExpense = expenses[targetIndex];
+    if (isEdit) {
+      next = expenses.map((item) => {
+        if (item.id !== editingExpenseId) return item;
+        saved = { ...item, ...values };
+        return saved;
+      });
+      if (!saved) {
+        // Record vanished (e.g. deleted elsewhere); don't create a duplicate
+        isSubmitting = false;
+        dialogSubmitBtn.disabled = false;
+        showToast('This expense no longer exists, so it couldn’t be updated.', { type: 'error' });
+        return;
       }
     } else {
-      savedExpense = {
-        id: 'exp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
-        description,
-        amount,
-        category,
-        date,
-        createdAt: Date.now()
-      };
-      expenses.push(savedExpense);
+      saved = { id: generateId(), ...values, createdAt: Date.now() };
+      next = [...expenses, saved];
     }
 
-    // Persist to localStorage
-    const saveSucceeded = saveExpenses();
-
-    if (!saveSucceeded) {
-      // Re-enable button and preserve inputs
+    if (!persist(next)) {
+      // Keep the dialog open with the user's input intact
+      isSubmitting = false;
       dialogSubmitBtn.disabled = false;
       return;
     }
 
-    // Force close dialog without dirty confirmation
-    closeExpenseDialog(true);
+    const returnTo = lastFocusedTrigger;
+    closeExpenseDialog(true, false);
     refreshAll();
 
-    // Check if the saved expense is visible with current filters active
-    const isVisibleUnderFilters = doesExpenseMatchActiveFilters(savedExpense);
-
-    if (!isVisibleUnderFilters) {
-      showToast(
-        'Expense saved, but it is currently hidden by active filters.',
-        'Clear filters',
-        () => resetAllFilters()
-      );
-    } else {
-      showToast(isEditMode ? 'Changes saved.' : 'Expense added successfully.', null, null, 'success');
-
-      // Highlight the saved row in the list
-      setTimeout(() => {
-        const itemEl = document.querySelector(`.expense-item[data-id="${savedExpense.id}"]`);
-        if (itemEl) {
-          itemEl.classList.add('item-highlight');
-          itemEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      }, 50);
+    if (!matchesFilters(saved)) {
+      showToast('Expense saved. It’s hidden by your current filters.', {
+        type: 'info',
+        actionLabel: 'Clear filters',
+        onAction: () => { resetAllFilters(); highlightRow(saved.id); },
+        duration: 7000
+      });
+      if (isVisible(returnTo)) returnTo.focus(); else focusFallback();
+      return;
     }
+
+    showToast(isEdit ? 'Changes saved.' : 'Expense added.');
+    if (isEdit && findRowTrigger(saved.id)) findRowTrigger(saved.id).focus();
+    else if (isVisible(returnTo)) returnTo.focus();
+    else openAddDialogBtn.focus();
+    highlightRow(saved.id);
   }
 
-  // --- Delete Confirmation Flow ---
+  // --- Delete --------------------------------------------------------------
 
-  function openDeleteConfirmation(id, triggerEl = null) {
+  function openDeleteConfirmation(id, triggerEl) {
     const expense = expenses.find((item) => item.id === id);
     if (!expense) return;
-
     pendingDeleteId = id;
     lastFocusedTrigger = triggerEl;
 
     deletePreviewContent.innerHTML = `
       <div class="delete-preview-details">
         <span class="delete-preview-title">${escapeHtml(expense.description)}</span>
-        <span class="delete-preview-sub">${escapeHtml(expense.category)} &bull; ${formatDateDisplay(expense.date)}</span>
+        <span class="delete-preview-sub">${escapeHtml(expense.category)} · ${escapeHtml(formatDateDisplay(expense.date))}</span>
       </div>
-      <span class="delete-preview-amount">${formatINR(expense.amount)}</span>
-    `;
+      <span class="delete-preview-amount">${formatINR(expense.amount)}</span>`;
 
-    if (typeof deleteDialog.showModal === 'function') {
-      deleteDialog.showModal();
-    } else {
-      deleteDialog.setAttribute('open', '');
-    }
-
-    // Safer initial focus on Cancel button
-    setTimeout(() => {
-      deleteCancelBtn.focus();
-    }, 40);
+    showDialog(deleteDialog);
+    deleteCancelBtn.focus(); // safer default
   }
 
-  function closeDeleteConfirmation() {
+  function closeDeleteConfirmation(restoreFocus = true) {
     pendingDeleteId = null;
-    if (typeof deleteDialog.close === 'function') {
-      deleteDialog.close();
-    } else {
-      deleteDialog.removeAttribute('open');
-    }
-
-    if (lastFocusedTrigger && typeof lastFocusedTrigger.focus === 'function') {
-      lastFocusedTrigger.focus();
+    hideDialog(deleteDialog);
+    if (restoreFocus) {
+      if (isVisible(lastFocusedTrigger)) lastFocusedTrigger.focus();
+      else focusFallback();
     }
   }
 
   function handleConfirmDelete() {
     if (!pendingDeleteId) return;
+    const id = pendingDeleteId;
 
-    const idToDelete = pendingDeleteId;
-    expenses = expenses.filter((item) => item.id !== idToDelete);
+    // Work out where focus should go once the row disappears
+    const visibleIds = getFilteredAndSortedExpenses().map((item) => item.id);
+    const pos = visibleIds.indexOf(id);
+    const neighbourId = visibleIds[pos + 1] || visibleIds[pos - 1] || null;
 
-    saveExpenses();
-    closeDeleteConfirmation();
+    if (!persist(expenses.filter((item) => item.id !== id))) {
+      closeDeleteConfirmation(true);
+      return;
+    }
+
+    closeDeleteConfirmation(false);
     refreshAll();
+    showToast('Expense deleted.');
 
-    showToast('Expense deleted.', null, null, 'success');
+    const neighbour = neighbourId && findRowTrigger(neighbourId);
+    if (neighbour) neighbour.focus();
+    else focusFallback();
   }
 
-  // --- Real-time Input Validation Clearing ---
+  // --- Events --------------------------------------------------------------
 
-  amountInput.addEventListener('input', () => {
-    if (amountInput.classList.contains('is-invalid')) {
-      amountInput.classList.remove('is-invalid');
-      amountErrorEl.textContent = '';
-    }
+  // Form: clear a field's error as soon as it's edited
+  FIELD_ERRORS.forEach(([input, errorEl]) => {
+    const evt = input.tagName === 'SELECT' ? 'change' : 'input';
+    input.addEventListener(evt, () => {
+      if (!input.classList.contains('is-invalid')) return;
+      input.classList.remove('is-invalid');
+      input.removeAttribute('aria-invalid');
+      errorEl.textContent = '';
+    });
   });
 
-  descInput.addEventListener('input', () => {
-    if (descInput.classList.contains('is-invalid')) {
-      descInput.classList.remove('is-invalid');
-      descErrorEl.textContent = '';
-    }
-  });
-
-  categorySelect.addEventListener('change', () => {
-    if (categorySelect.classList.contains('is-invalid')) {
-      categorySelect.classList.remove('is-invalid');
-      categoryErrorEl.textContent = '';
-    }
-  });
-
-  dateInput.addEventListener('input', () => {
-    if (dateInput.classList.contains('is-invalid')) {
-      dateInput.classList.remove('is-invalid');
-      dateErrorEl.textContent = '';
-    }
-  });
-
-  // --- Event Listeners ---
-
-  // Dialog triggers
   openAddDialogBtn.addEventListener('click', () => openAddDialog(openAddDialogBtn));
   emptyStateAddBtn.addEventListener('click', () => openAddDialog(emptyStateAddBtn));
-
   dialogCloseBtn.addEventListener('click', () => closeExpenseDialog());
   dialogCancelBtn.addEventListener('click', () => closeExpenseDialog());
   expenseForm.addEventListener('submit', handleFormSubmit);
 
-  // Discard Confirmation Dialog buttons
   discardStayBtn.addEventListener('click', () => {
-    closeDiscardDialog();
+    hideDialog(discardDialog);
     amountInput.focus();
   });
-
   discardConfirmBtn.addEventListener('click', () => {
-    closeDiscardDialog();
+    hideDialog(discardDialog);
     closeExpenseDialog(true);
   });
 
-  // Delete Dialog buttons
-  deleteCancelBtn.addEventListener('click', closeDeleteConfirmation);
+  deleteCancelBtn.addEventListener('click', () => closeDeleteConfirmation(true));
   deleteConfirmBtn.addEventListener('click', handleConfirmDelete);
 
-  // Search & Filter Listeners
-  searchInput.addEventListener('input', () => {
-    renderList();
-  });
-
+  searchInput.addEventListener('input', renderList);
   clearSearchBtn.addEventListener('click', () => {
     searchInput.value = '';
+    renderList();
     searchInput.focus();
-    renderList();
   });
-
-  filterCategorySelect.addEventListener('change', () => {
-    renderList();
-  });
+  filterCategorySelect.addEventListener('change', renderList);
 
   filterDateSelect.addEventListener('change', () => {
-    if (filterDateSelect.value === 'CUSTOM') {
-      customDateContainer.classList.remove('hidden');
-      if (!customDateStartInput.value) customDateStartInput.value = getTodayDateString();
+    const custom = filterDateSelect.value === 'CUSTOM';
+    customDateContainer.classList.toggle('hidden', !custom);
+    if (custom) {
+      if (!customDateStartInput.value) customDateStartInput.value = `${getCurrentMonthPrefix()}-01`;
       if (!customDateEndInput.value) customDateEndInput.value = getTodayDateString();
     } else {
-      customDateContainer.classList.add('hidden');
-      customDateErrorEl.textContent = '';
+      customDateStartInput.value = '';
+      customDateEndInput.value = '';
     }
+    validateCustomRange();
     renderList();
   });
 
-  // Custom Date range change & validation
-  function handleCustomDateChange() {
-    const startVal = customDateStartInput.value;
-    const endVal = customDateEndInput.value;
-
-    if (startVal && endVal && startVal > endVal) {
-      customDateErrorEl.textContent = 'Start date cannot be after end date.';
-    } else {
-      customDateErrorEl.textContent = '';
+  [customDateStartInput, customDateEndInput].forEach((input) => {
+    input.addEventListener('change', () => {
+      validateCustomRange();
       renderList();
-    }
-  }
-
-  customDateStartInput.addEventListener('change', handleCustomDateChange);
-  customDateEndInput.addEventListener('change', handleCustomDateChange);
-
-  // Reset Filters CTAs
-  resetAllFiltersBtn.addEventListener('click', resetAllFilters);
-  noResultsClearBtn.addEventListener('click', resetAllFilters);
-
-  // Backdrop click handling for native <dialog>
-  [expenseDialog, deleteDialog, discardDialog].forEach((dlg) => {
-    dlg.addEventListener('click', (e) => {
-      // If clicked on backdrop (target === dialog itself and coordinates outside dialog content box)
-      if (e.target === dlg) {
-        const rect = dlg.getBoundingClientRect();
-        const isInDialog = (
-          rect.top <= e.clientY &&
-          e.clientY <= rect.top + rect.height &&
-          rect.left <= e.clientX &&
-          e.clientX <= rect.left + rect.width
-        );
-
-        if (!isInDialog) {
-          if (dlg === expenseDialog) {
-            closeExpenseDialog();
-          } else if (dlg === deleteDialog) {
-            closeDeleteConfirmation();
-          } else if (dlg === discardDialog) {
-            closeDiscardDialog();
-          }
-        }
-      }
     });
+  });
 
-    // Native cancel event (triggered by Escape key)
+  clearFiltersBtn.addEventListener('click', () => {
+    resetAllFilters();
+    searchInput.focus(); // the button itself is now hidden
+  });
+  noResultsClearBtn.addEventListener('click', () => {
+    resetAllFilters();
+    searchInput.focus();
+  });
+
+  // Backdrop clicks and Escape for each dialog
+  const dialogCloseHandlers = new Map([
+    [expenseDialog, () => closeExpenseDialog()],
+    [deleteDialog, () => closeDeleteConfirmation(true)],
+    [discardDialog, () => { hideDialog(discardDialog); amountInput.focus(); }]
+  ]);
+
+  dialogCloseHandlers.forEach((handler, dlg) => {
+    dlg.addEventListener('click', (e) => {
+      if (e.target !== dlg) return;
+      const r = dlg.getBoundingClientRect();
+      const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      if (!inside) handler();
+    });
     dlg.addEventListener('cancel', (e) => {
       e.preventDefault();
-      if (dlg === expenseDialog) {
-        closeExpenseDialog();
-      } else if (dlg === deleteDialog) {
-        closeDeleteConfirmation();
-      } else if (dlg === discardDialog) {
-        closeDiscardDialog();
-      }
+      handler();
     });
   });
 
-  // --- Initialization ---
+  // --- Init ----------------------------------------------------------------
 
-  function init() {
-    loadExpenses();
-    updateSummaryMetrics();
-    renderList();
-  }
-
-  init();
+  loadExpenses();
+  refreshAll();
+  metricsReady = true;
 })();
