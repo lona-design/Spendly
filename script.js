@@ -1,73 +1,167 @@
 /**
- * PocketLog - Daily Expense Tracker
- * Vanilla JavaScript implementation
+ * PocketLog — Calm, Premium, Refined Daily Expense Tracker
+ * Vanilla JavaScript Implementation
  */
 
 (() => {
   'use strict';
 
-  // --- Constants & Storage Key ---
+  // --- Constants & Configuration ---
   const STORAGE_KEY = 'pocketlog_expenses';
   const VALID_CATEGORIES = ['Food', 'Transport', 'Shopping', 'Bills', 'Health', 'Other'];
 
-  // --- State ---
+  // --- Application State ---
   let expenses = [];
   let editingExpenseId = null;
   let pendingDeleteId = null;
+  let lastFocusedTrigger = null;
+  let initialFormValues = null;
 
   // --- DOM Elements ---
-  const totalAmountEl = document.getElementById('total-amount');
+
+  // Summary Metrics (Global scope, independent of filters)
+  const monthAmountEl = document.getElementById('month-amount');
+  const monthPeriodLabelEl = document.getElementById('month-period-label');
+  const alltimeAmountEl = document.getElementById('alltime-amount');
   const totalCountEl = document.getElementById('total-count');
-  const filteredCountEl = document.getElementById('filtered-count');
 
-  const formEl = document.getElementById('expense-form');
-  const formHeadingEl = document.getElementById('form-heading');
-  const formBadgeEl = document.getElementById('form-badge');
-  const submitBtn = document.getElementById('submit-btn');
-  const submitBtnText = submitBtn.querySelector('span');
-  const cancelBtn = document.getElementById('cancel-btn');
-
-  const descInput = document.getElementById('expense-description');
-  const amountInput = document.getElementById('expense-amount');
-  const categorySelect = document.getElementById('expense-category');
-  const dateInput = document.getElementById('expense-date');
-
-  const descError = document.getElementById('desc-error');
-  const amountError = document.getElementById('amount-error');
-  const categoryError = document.getElementById('category-error');
-  const dateError = document.getElementById('date-error');
-
+  // Expenses Section & Results Subtotal
+  const resultsCountEl = document.getElementById('results-count');
+  const resultsSubtotalEl = document.getElementById('results-subtotal');
   const searchInput = document.getElementById('search-input');
   const clearSearchBtn = document.getElementById('clear-search-btn');
   const filterCategorySelect = document.getElementById('filter-category');
+  const filterDateSelect = document.getElementById('filter-date');
 
+  // Custom Date Range Sub-controls
+  const customDateContainer = document.getElementById('custom-date-container');
+  const customDateStartInput = document.getElementById('custom-date-start');
+  const customDateEndInput = document.getElementById('custom-date-end');
+  const customDateErrorEl = document.getElementById('custom-date-error');
+  const filterStatusBar = document.getElementById('filter-status-bar');
+  const resetAllFiltersBtn = document.getElementById('reset-all-filters-btn');
+
+  // List & State Containers
+  const desktopListHeader = document.getElementById('desktop-list-header');
   const expenseListEl = document.getElementById('expense-list');
   const emptyStateEl = document.getElementById('empty-state');
   const noResultsStateEl = document.getElementById('no-results-state');
-  const emptyAddBtn = document.getElementById('empty-add-btn');
-  const resetFiltersBtn = document.getElementById('reset-filters-btn');
+  const emptyStateAddBtn = document.getElementById('empty-state-add-btn');
+  const noResultsClearBtn = document.getElementById('no-results-clear-btn');
 
-  // Modal elements
-  const confirmModal = document.getElementById('confirm-modal');
-  const modalCancelBtn = document.getElementById('modal-cancel-btn');
-  const modalConfirmBtn = document.getElementById('modal-confirm-btn');
-  const deletePreviewEl = document.getElementById('delete-preview');
+  // Header CTA Trigger
+  const openAddDialogBtn = document.getElementById('open-add-dialog-btn');
 
-  // --- Utilities ---
+  // Add / Edit Dialog Elements
+  const expenseDialog = document.getElementById('expense-dialog');
+  const dialogTitleEl = document.getElementById('dialog-title');
+  const dialogCloseBtn = document.getElementById('dialog-close-btn');
+  const dialogCancelBtn = document.getElementById('dialog-cancel-btn');
+  const dialogSubmitBtn = document.getElementById('dialog-submit-btn');
+  const submitBtnText = document.getElementById('submit-btn-text');
+  const expenseForm = document.getElementById('expense-form');
+
+  // Form Fields & Error Elements
+  const amountInput = document.getElementById('expense-amount');
+  const descInput = document.getElementById('expense-description');
+  const categorySelect = document.getElementById('expense-category');
+  const dateInput = document.getElementById('expense-date');
+
+  const amountErrorEl = document.getElementById('amount-error');
+  const descErrorEl = document.getElementById('desc-error');
+  const categoryErrorEl = document.getElementById('category-error');
+  const dateErrorEl = document.getElementById('date-error');
+
+  // Delete Confirmation Dialog Elements
+  const deleteDialog = document.getElementById('delete-dialog');
+  const deletePreviewContent = document.getElementById('delete-preview-content');
+  const deleteCancelBtn = document.getElementById('delete-cancel-btn');
+  const deleteConfirmBtn = document.getElementById('delete-confirm-btn');
+
+  // Unsaved Changes Discard Dialog Elements
+  const discardDialog = document.getElementById('discard-dialog');
+  const discardStayBtn = document.getElementById('discard-stay-btn');
+  const discardConfirmBtn = document.getElementById('discard-confirm-btn');
+
+  // Toast Container
+  const toastRegion = document.getElementById('toast-region');
+
+  // --- Utility Functions ---
 
   /**
-   * Return today's local date in 'YYYY-MM-DD' format.
+   * Return today's date in local calendar 'YYYY-MM-DD' format.
+   * Avoids UTC shift bugs by reading local year, month, day.
    */
   function getTodayDateString() {
     const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
 
   /**
-   * Format a numeric amount to Indian Rupee currency format (e.g. ₹1,250.00).
+   * Return 'YYYY-MM' for the current local calendar month.
+   */
+  function getCurrentMonthPrefix() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}`;
+  }
+
+  /**
+   * Return 'YYYY-MM' for the previous local calendar month.
+   */
+  function getLastMonthPrefix() {
+    const now = new Date();
+    let y = now.getFullYear();
+    let m = now.getMonth(); // 0-indexed, so 0 (Jan) becomes month 12 of y-1
+    if (m === 0) {
+      m = 12;
+      y -= 1;
+    }
+    return `${y}-${String(m).padStart(2, '0')}`;
+  }
+
+  /**
+   * Format month prefix ('YYYY-MM') to readable text, e.g. "November 2026".
+   */
+  function formatMonthYearLabel(prefix) {
+    if (!prefix) return '';
+    const parts = prefix.split('-');
+    if (parts.length !== 2) return prefix;
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = new Date(y, m, 1);
+    return d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  }
+
+  /**
+   * Convert currency amount to integer paise to prevent floating-point calculation errors.
+   */
+  function toPaise(amt) {
+    return Math.round((Number(amt) || 0) * 100);
+  }
+
+  /**
+   * Convert integer paise back to float.
+   */
+  function fromPaise(paise) {
+    return paise / 100;
+  }
+
+  /**
+   * Sum an array of expense records with floating-point precision safety.
+   */
+  function sumExpenses(list) {
+    if (!list || !list.length) return 0;
+    const totalPaise = list.reduce((acc, item) => acc + toPaise(item.amount), 0);
+    return fromPaise(totalPaise);
+  }
+
+  /**
+   * Format a numeric amount to Indian Rupee standard format (e.g. ₹1,250.00).
    */
   function formatINR(amount) {
     const num = Number(amount) || 0;
@@ -78,16 +172,16 @@
   }
 
   /**
-   * Format YYYY-MM-DD date string to readable format (e.g. "06 Nov 2026").
+   * Format 'YYYY-MM-DD' into readable date, e.g. "06 Nov 2026".
    */
   function formatDateDisplay(dateStr) {
     if (!dateStr) return '';
     const parts = dateStr.split('-');
     if (parts.length !== 3) return dateStr;
-    const year = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10) - 1;
-    const day = parseInt(parts[2], 10);
-    const dateObj = new Date(year, month, day);
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    const dateObj = new Date(y, m, d);
 
     if (isNaN(dateObj.getTime())) return dateStr;
 
@@ -99,21 +193,33 @@
   }
 
   /**
-   * Generate CSS category class for badge styling.
+   * Return category badge class.
    */
-  function getCategoryClass(category) {
+  function getCategoryBadgeClass(category) {
     const cat = (category || '').toLowerCase();
     switch (cat) {
-      case 'food': return 'cat-food';
-      case 'transport': return 'cat-transport';
-      case 'shopping': return 'cat-shopping';
-      case 'bills': return 'cat-bills';
-      case 'health': return 'cat-health';
-      default: return 'cat-other';
+      case 'food': return 'cat-badge-food';
+      case 'transport': return 'cat-badge-transport';
+      case 'shopping': return 'cat-badge-shopping';
+      case 'bills': return 'cat-badge-bills';
+      case 'health': return 'cat-badge-health';
+      default: return 'cat-badge-other';
     }
   }
 
-  // --- LocalStorage Management ---
+  /**
+   * Escape HTML strings when rendering dynamically to prevent XSS.
+   */
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  // --- LocalStorage Management (Graceful failure handling) ---
 
   function loadExpenses() {
     try {
@@ -124,12 +230,21 @@
       }
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        expenses = parsed;
+        // Backward-compatible schema validation: preserve IDs and timestamps
+        expenses = parsed.map((item) => ({
+          id: item.id || ('exp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7)),
+          description: String(item.description || ''),
+          amount: Math.abs(parseFloat(Number(item.amount).toFixed(2))) || 0,
+          category: VALID_CATEGORIES.includes(item.category) ? item.category : 'Other',
+          date: item.date || getTodayDateString(),
+          createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now()
+        }));
       } else {
         expenses = [];
       }
     } catch (err) {
       console.error('Failed to parse expenses from localStorage:', err);
+      showToast('Could not read existing expenses from browser storage.', null, null, 'error');
       expenses = [];
     }
   }
@@ -137,155 +252,191 @@
   function saveExpenses() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses));
+      return true;
     } catch (err) {
       console.error('Failed to save expenses to localStorage:', err);
+      showToast('Storage full or restricted. Changes could not be saved to this browser.', null, null, 'error');
+      return false;
     }
   }
 
-  // --- Summary & Overview ---
+  // --- Toast Notification Region (Status messages, aria-live="polite") ---
 
   /**
-   * Update the top overview statistics.
-   * Calculated from ALL saved expenses regardless of current filter.
+   * Show a non-blocking toast notification.
    */
-  function updateOverviewStats() {
-    const totalCount = expenses.length;
-    const totalAmount = expenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  function showToast(message, actionLabel = null, actionCallback = null, type = 'info', duration = 4000) {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
 
-    totalCountEl.textContent = totalCount.toLocaleString('en-IN');
-    totalAmountEl.textContent = formatINR(totalAmount);
-  }
+    const msgSpan = document.createElement('span');
+    msgSpan.className = 'toast-message';
+    msgSpan.textContent = message;
+    toast.appendChild(msgSpan);
 
-  // --- Validation ---
-
-  function clearValidationErrors() {
-    descInput.classList.remove('is-invalid');
-    amountInput.classList.remove('is-invalid');
-    categorySelect.classList.remove('is-invalid');
-    dateInput.classList.remove('is-invalid');
-
-    descError.textContent = '';
-    amountError.textContent = '';
-    categoryError.textContent = '';
-    dateError.textContent = '';
-  }
-
-  function validateForm() {
-    clearValidationErrors();
-    let isValid = true;
-
-    // Validate Description
-    const descValue = descInput.value.trim();
-    if (!descValue) {
-      descInput.classList.add('is-invalid');
-      descError.textContent = 'Please enter an expense description.';
-      isValid = false;
-    } else if (descValue.length > 100) {
-      descInput.classList.add('is-invalid');
-      descError.textContent = 'Description cannot exceed 100 characters.';
-      isValid = false;
+    if (actionLabel && typeof actionCallback === 'function') {
+      const actionBtn = document.createElement('button');
+      actionBtn.type = 'button';
+      actionBtn.className = 'toast-action-btn';
+      actionBtn.textContent = actionLabel;
+      actionBtn.addEventListener('click', () => {
+        actionCallback();
+        removeToast(toast);
+      });
+      toast.appendChild(actionBtn);
     }
 
-    // Validate Amount
-    const amountValRaw = amountInput.value.trim();
-    if (!amountValRaw) {
-      amountInput.classList.add('is-invalid');
-      amountError.textContent = 'Please enter an amount.';
-      isValid = false;
-    } else {
-      const amountNumber = Number(amountValRaw);
-      if (isNaN(amountNumber) || amountNumber <= 0) {
-        amountInput.classList.add('is-invalid');
-        amountError.textContent = 'Amount must be a number greater than ₹0.';
-        isValid = false;
-      } else {
-        // Check decimal places (maximum 2 decimals allowed)
-        const parts = amountValRaw.split('.');
-        if (parts.length > 1 && parts[1].length > 2) {
-          amountInput.classList.add('is-invalid');
-          amountError.textContent = 'Amount can have at most 2 decimal places.';
-          isValid = false;
+    toastRegion.appendChild(toast);
+
+    const timer = setTimeout(() => {
+      removeToast(toast);
+    }, duration);
+
+    function removeToast(el) {
+      clearTimeout(timer);
+      if (!el.parentNode) return;
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(8px)';
+      el.style.transition = 'opacity 0.16s ease, transform 0.16s ease';
+      setTimeout(() => {
+        if (el.parentNode) {
+          el.parentNode.removeChild(el);
         }
-      }
+      }, 180);
     }
+  }
 
-    // Validate Category
-    const categoryValue = categorySelect.value;
-    if (!categoryValue || !VALID_CATEGORIES.includes(categoryValue)) {
-      categorySelect.classList.add('is-invalid');
-      categoryError.textContent = 'Please select a valid category.';
-      isValid = false;
-    }
+  // --- Summary Metrics (All-time and Current Month) ---
 
-    // Validate Date
-    const dateValue = dateInput.value;
-    if (!dateValue) {
-      dateInput.classList.add('is-invalid');
-      dateError.textContent = 'Please pick a valid date.';
-      isValid = false;
-    } else {
-      const parsedDate = new Date(dateValue);
-      if (isNaN(parsedDate.getTime())) {
-        dateInput.classList.add('is-invalid');
-        dateError.textContent = 'Invalid date selected.';
-        isValid = false;
-      }
-    }
+  /**
+   * Update top summary cards.
+   * Defined from ALL saved expenses regardless of list filters.
+   */
+  function updateSummaryMetrics() {
+    const currentMonth = getCurrentMonthPrefix();
+    const currentMonthExpenses = expenses.filter((item) => item.date.startsWith(currentMonth));
 
-    return isValid;
+    const monthTotal = sumExpenses(currentMonthExpenses);
+    const alltimeTotal = sumExpenses(expenses);
+    const countTotal = expenses.length;
+
+    monthAmountEl.textContent = formatINR(monthTotal);
+    monthPeriodLabelEl.textContent = formatMonthYearLabel(currentMonth);
+
+    alltimeAmountEl.textContent = formatINR(alltimeTotal);
+    totalCountEl.textContent = countTotal.toLocaleString('en-IN');
   }
 
   // --- Filtering & Sorting ---
 
-  /**
-   * Filter and sort expenses.
-   * Newest dates first. If same date, newest added first (createdAt descending).
-   */
+  function isFilterActive() {
+    const hasSearch = searchInput.value.trim().length > 0;
+    const hasCategory = filterCategorySelect.value !== 'ALL';
+    const hasDate = filterDateSelect.value !== 'ALL';
+    return hasSearch || hasCategory || hasDate;
+  }
+
   function getFilteredAndSortedExpenses() {
     const searchQuery = searchInput.value.trim().toLowerCase();
     const selectedCategory = filterCategorySelect.value;
+    const selectedDateMode = filterDateSelect.value;
+
+    const currentMonth = getCurrentMonthPrefix();
+    const lastMonth = getLastMonthPrefix();
+
+    const customStart = customDateStartInput.value;
+    const customEnd = customDateEndInput.value;
 
     return expenses
       .filter((item) => {
-        // Description match
-        const matchesSearch = !searchQuery || item.description.toLowerCase().includes(searchQuery);
+        // 1. Description Search Match (case-insensitive substring)
+        if (searchQuery && !item.description.toLowerCase().includes(searchQuery)) {
+          return false;
+        }
 
-        // Category match
-        const matchesCategory = selectedCategory === 'ALL' || item.category === selectedCategory;
+        // 2. Category Match
+        if (selectedCategory !== 'ALL' && item.category !== selectedCategory) {
+          return false;
+        }
 
-        return matchesSearch && matchesCategory;
+        // 3. Date Range Match
+        if (selectedDateMode === 'THIS_MONTH') {
+          if (!item.date.startsWith(currentMonth)) return false;
+        } else if (selectedDateMode === 'LAST_MONTH') {
+          if (!item.date.startsWith(lastMonth)) return false;
+        } else if (selectedDateMode === 'CUSTOM') {
+          if (customStart && item.date < customStart) return false;
+          if (customEnd && item.date > customEnd) return false;
+        }
+
+        return true;
       })
       .sort((a, b) => {
-        // Sort newest dates first (YYYY-MM-DD string comparison)
-        const dateComparison = b.date.localeCompare(a.date);
-        if (dateComparison !== 0) {
-          return dateComparison;
-        }
-        // Secondary sort: createdAt descending (newest entry first)
+        // Newest date first
+        const dateDiff = b.date.localeCompare(a.date);
+        if (dateDiff !== 0) return dateDiff;
+        // Secondary sort: newest added first
         return (b.createdAt || 0) - (a.createdAt || 0);
       });
   }
 
-  // --- Rendering ---
+  /**
+   * Check if a specific expense matches the currently active search & filters.
+   */
+  function doesExpenseMatchActiveFilters(item) {
+    const searchQuery = searchInput.value.trim().toLowerCase();
+    const selectedCategory = filterCategorySelect.value;
+    const selectedDateMode = filterDateSelect.value;
+    const currentMonth = getCurrentMonthPrefix();
+    const lastMonth = getLastMonthPrefix();
+    const customStart = customDateStartInput.value;
+    const customEnd = customDateEndInput.value;
+
+    if (searchQuery && !item.description.toLowerCase().includes(searchQuery)) return false;
+    if (selectedCategory !== 'ALL' && item.category !== selectedCategory) return false;
+
+    if (selectedDateMode === 'THIS_MONTH' && !item.date.startsWith(currentMonth)) return false;
+    if (selectedDateMode === 'LAST_MONTH' && !item.date.startsWith(lastMonth)) return false;
+    if (selectedDateMode === 'CUSTOM') {
+      if (customStart && item.date < customStart) return false;
+      if (customEnd && item.date > customEnd) return false;
+    }
+
+    return true;
+  }
+
+  // --- Rendering Expenses List ---
 
   function renderList() {
+    const hasAnyExpenses = expenses.length > 0;
     const filtered = getFilteredAndSortedExpenses();
-    const hasTotalExpenses = expenses.length > 0;
     const hasFilteredResults = filtered.length > 0;
+    const filterActive = isFilterActive();
 
-    // Toggle clear search button visibility
+    // Toggle clear search button
     if (searchInput.value.trim().length > 0) {
       clearSearchBtn.classList.remove('hidden');
     } else {
       clearSearchBtn.classList.add('hidden');
     }
 
-    // Update filtered count badge
-    filteredCountEl.textContent = `${filtered.length} ${filtered.length === 1 ? 'entry' : 'entries'}`;
+    // Toggle active filter status bar
+    if (filterActive) {
+      filterStatusBar.classList.remove('hidden');
+    } else {
+      filterStatusBar.classList.add('hidden');
+    }
 
-    // Handle view states
-    if (!hasTotalExpenses) {
-      // 1. App is completely empty (no saved expenses)
+    // Update Results Subtotal and Count
+    const filteredSubtotal = sumExpenses(filtered);
+    resultsCountEl.textContent = `${filtered.length} matching ${filtered.length === 1 ? 'expense' : 'expenses'}`;
+    resultsSubtotalEl.textContent = formatINR(filteredSubtotal);
+
+    // View States:
+    // Case 1: No saved expenses at all in the entire app
+    if (!hasAnyExpenses) {
+      desktopListHeader.classList.add('hidden');
       expenseListEl.innerHTML = '';
       expenseListEl.classList.add('hidden');
       noResultsStateEl.classList.add('hidden');
@@ -293,8 +444,9 @@
       return;
     }
 
+    // Case 2: Saved expenses exist, but active filters yield 0 records
     if (!hasFilteredResults) {
-      // 2. Saved expenses exist, but filter/search yielded 0 matches
+      desktopListHeader.classList.add('hidden');
       expenseListEl.innerHTML = '';
       expenseListEl.classList.add('hidden');
       emptyStateEl.classList.add('hidden');
@@ -302,11 +454,11 @@
       return;
     }
 
-    // 3. Normal state: render matching expense items
+    // Case 3: Matching expenses exist
     emptyStateEl.classList.add('hidden');
     noResultsStateEl.classList.add('hidden');
+    desktopListHeader.classList.remove('hidden');
     expenseListEl.classList.remove('hidden');
-
     expenseListEl.innerHTML = '';
 
     filtered.forEach((expense) => {
@@ -314,177 +466,318 @@
       li.className = 'expense-item';
       li.dataset.id = expense.id;
 
-      // Safe text construction using DOM methods to prevent any XSS
-      const mainInfo = document.createElement('div');
-      mainInfo.className = 'expense-main-info';
+      li.innerHTML = `
+        <div class="col-desc">
+          <span class="desc-text">${escapeHtml(expense.description)}</span>
+        </div>
 
-      const descRow = document.createElement('div');
-      descRow.className = 'expense-desc-row';
+        <div class="col-meta-wrapper">
+          <div class="col-cat">
+            <span class="category-badge ${getCategoryBadgeClass(expense.category)}">
+              ${escapeHtml(expense.category)}
+            </span>
+          </div>
+          <div class="col-date">
+            <span>${formatDateDisplay(expense.date)}</span>
+          </div>
+        </div>
 
-      const descSpan = document.createElement('span');
-      descSpan.className = 'expense-desc';
-      descSpan.textContent = expense.description;
+        <div class="col-amount">
+          <span>${formatINR(expense.amount)}</span>
+        </div>
 
-      const categoryPill = document.createElement('span');
-      categoryPill.className = `category-pill ${getCategoryClass(expense.category)}`;
-      categoryPill.textContent = expense.category;
-
-      descRow.appendChild(descSpan);
-      descRow.appendChild(categoryPill);
-
-      const dateRow = document.createElement('div');
-      dateRow.className = 'expense-date';
-      dateRow.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-          <line x1="16" y1="2" x2="16" y2="6"></line>
-          <line x1="8" y1="2" x2="8" y2="6"></line>
-          <line x1="3" y1="10" x2="21" y2="10"></line>
-        </svg>
-        <span>${formatDateDisplay(expense.date)}</span>
+        <div class="col-actions">
+          <button type="button" class="btn btn-row-action btn-row-edit" data-action="edit" data-id="${expense.id}" aria-label="Edit expense: ${escapeHtml(expense.description)}">
+            Edit
+          </button>
+          <button type="button" class="btn btn-row-action btn-row-delete" data-action="delete" data-id="${expense.id}" aria-label="Delete expense: ${escapeHtml(expense.description)}">
+            Delete
+          </button>
+        </div>
       `;
 
-      mainInfo.appendChild(descRow);
-      mainInfo.appendChild(dateRow);
+      // Event Listeners for Edit & Delete buttons
+      const editBtn = li.querySelector('[data-action="edit"]');
+      const deleteBtn = li.querySelector('[data-action="delete"]');
 
-      const rightInfo = document.createElement('div');
-      rightInfo.className = 'expense-right-info';
-
-      const amountSpan = document.createElement('span');
-      amountSpan.className = 'expense-amount';
-      amountSpan.textContent = formatINR(expense.amount);
-
-      const actionsDiv = document.createElement('div');
-      actionsDiv.className = 'expense-actions';
-
-      // Edit Button
-      const editBtn = document.createElement('button');
-      editBtn.type = 'button';
-      editBtn.className = 'btn btn-secondary btn-sm edit-btn';
-      editBtn.setAttribute('aria-label', `Edit expense: ${expense.description}`);
-      editBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-        </svg>
-        <span>Edit</span>
-      `;
-      editBtn.addEventListener('click', () => startEditing(expense.id));
-
-      // Delete Button
-      const deleteBtn = document.createElement('button');
-      deleteBtn.type = 'button';
-      deleteBtn.className = 'btn btn-outline-danger btn-sm delete-btn';
-      deleteBtn.setAttribute('aria-label', `Delete expense: ${expense.description}`);
-      deleteBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="3 6 5 6 21 6"></polyline>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-        </svg>
-        <span>Delete</span>
-      `;
-      deleteBtn.addEventListener('click', () => promptDelete(expense.id));
-
-      actionsDiv.appendChild(editBtn);
-      actionsDiv.appendChild(deleteBtn);
-
-      rightInfo.appendChild(amountSpan);
-      rightInfo.appendChild(actionsDiv);
-
-      li.appendChild(mainInfo);
-      li.appendChild(rightInfo);
+      if (editBtn) {
+        editBtn.addEventListener('click', () => openEditDialog(expense.id, editBtn));
+      }
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', () => openDeleteConfirmation(expense.id, deleteBtn));
+      }
 
       expenseListEl.appendChild(li);
     });
   }
 
   function refreshAll() {
-    updateOverviewStats();
+    updateSummaryMetrics();
     renderList();
   }
 
-  // --- Form Reset & Mode Switch ---
+  // --- Reset Filters ---
 
-  function resetForm() {
-    editingExpenseId = null;
-    formEl.reset();
-    clearValidationErrors();
-
-    // Default date to today
-    dateInput.value = getTodayDateString();
-
-    // Reset heading & buttons
-    formHeadingEl.textContent = 'Add Expense';
-    formBadgeEl.classList.add('hidden');
-    submitBtnText.textContent = 'Add Expense';
-    cancelBtn.classList.add('hidden');
+  function resetAllFilters() {
+    searchInput.value = '';
+    filterCategorySelect.value = 'ALL';
+    filterDateSelect.value = 'ALL';
+    customDateStartInput.value = '';
+    customDateEndInput.value = '';
+    customDateErrorEl.textContent = '';
+    customDateContainer.classList.add('hidden');
+    clearSearchBtn.classList.add('hidden');
+    renderList();
   }
 
-  function startEditing(id) {
+  // --- Add / Edit Dialog Management ---
+
+  function clearFormErrors() {
+    amountInput.classList.remove('is-invalid');
+    descInput.classList.remove('is-invalid');
+    categorySelect.classList.remove('is-invalid');
+    dateInput.classList.remove('is-invalid');
+
+    amountErrorEl.textContent = '';
+    descErrorEl.textContent = '';
+    categoryErrorEl.textContent = '';
+    dateErrorEl.textContent = '';
+  }
+
+  function recordInitialFormState() {
+    initialFormValues = {
+      amount: amountInput.value.trim(),
+      description: descInput.value.trim(),
+      category: categorySelect.value,
+      date: dateInput.value
+    };
+  }
+
+  function isFormDirty() {
+    if (!initialFormValues) return false;
+    return (
+      amountInput.value.trim() !== initialFormValues.amount ||
+      descInput.value.trim() !== initialFormValues.description ||
+      categorySelect.value !== initialFormValues.category ||
+      dateInput.value !== initialFormValues.date
+    );
+  }
+
+  function openAddDialog(triggerEl = null) {
+    lastFocusedTrigger = triggerEl || openAddDialogBtn;
+    editingExpenseId = null;
+
+    clearFormErrors();
+    expenseForm.reset();
+
+    // Set Default Values
+    dateInput.value = getTodayDateString();
+    categorySelect.value = '';
+
+    // Update Dialog UI
+    dialogTitleEl.textContent = 'Add expense';
+    submitBtnText.textContent = 'Save expense';
+    dialogSubmitBtn.disabled = false;
+
+    recordInitialFormState();
+
+    if (typeof expenseDialog.showModal === 'function') {
+      expenseDialog.showModal();
+    } else {
+      expenseDialog.setAttribute('open', '');
+    }
+
+    setTimeout(() => {
+      amountInput.focus();
+    }, 40);
+  }
+
+  function openEditDialog(id, triggerEl = null) {
     const expense = expenses.find((item) => item.id === id);
     if (!expense) return;
 
+    lastFocusedTrigger = triggerEl;
     editingExpenseId = id;
-    clearValidationErrors();
 
-    // Populate form fields
-    descInput.value = expense.description;
+    clearFormErrors();
+
+    // Populate Fields
     amountInput.value = Number(expense.amount).toFixed(2);
+    descInput.value = expense.description;
     categorySelect.value = expense.category;
     dateInput.value = expense.date;
 
-    // Update UI headers & buttons
-    formHeadingEl.textContent = 'Edit Expense';
-    formBadgeEl.classList.remove('hidden');
-    submitBtnText.textContent = 'Save Changes';
-    cancelBtn.classList.remove('hidden');
+    // Update Dialog UI
+    dialogTitleEl.textContent = 'Edit expense';
+    submitBtnText.textContent = 'Save changes';
+    dialogSubmitBtn.disabled = false;
 
-    // Scroll form into view and focus description field
-    formEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    descInput.focus();
+    recordInitialFormState();
+
+    if (typeof expenseDialog.showModal === 'function') {
+      expenseDialog.showModal();
+    } else {
+      expenseDialog.setAttribute('open', '');
+    }
+
+    setTimeout(() => {
+      amountInput.focus();
+    }, 40);
   }
 
-  // --- Submit / Save Expense ---
+  function closeExpenseDialog(force = false) {
+    if (!force && isFormDirty()) {
+      openDiscardDialog();
+      return;
+    }
+
+    if (typeof expenseDialog.close === 'function') {
+      expenseDialog.close();
+    } else {
+      expenseDialog.removeAttribute('open');
+    }
+
+    clearFormErrors();
+    editingExpenseId = null;
+    initialFormValues = null;
+
+    if (lastFocusedTrigger && typeof lastFocusedTrigger.focus === 'function') {
+      lastFocusedTrigger.focus();
+    }
+  }
+
+  // --- Unsaved Changes Guard Dialog ---
+
+  function openDiscardDialog() {
+    if (typeof discardDialog.showModal === 'function') {
+      discardDialog.showModal();
+    } else {
+      discardDialog.setAttribute('open', '');
+    }
+    setTimeout(() => {
+      discardStayBtn.focus();
+    }, 40);
+  }
+
+  function closeDiscardDialog() {
+    if (typeof discardDialog.close === 'function') {
+      discardDialog.close();
+    } else {
+      discardDialog.removeAttribute('open');
+    }
+  }
+
+  // --- Form Validation & Submission ---
+
+  function validateExpenseForm() {
+    clearFormErrors();
+    let isValid = true;
+    let firstInvalidField = null;
+
+    // 1. Amount Validation
+    const amountValRaw = amountInput.value.trim();
+    if (!amountValRaw) {
+      amountInput.classList.add('is-invalid');
+      amountErrorEl.textContent = 'Please enter an amount greater than ₹0.';
+      isValid = false;
+      firstInvalidField = firstInvalidField || amountInput;
+    } else {
+      const amountNum = Number(amountValRaw);
+      if (isNaN(amountNum) || !isFinite(amountNum) || amountNum <= 0) {
+        amountInput.classList.add('is-invalid');
+        amountErrorEl.textContent = 'Amount must be a valid number greater than ₹0.';
+        isValid = false;
+        firstInvalidField = firstInvalidField || amountInput;
+      } else {
+        const parts = amountValRaw.split('.');
+        if (parts.length > 1 && parts[1].length > 2) {
+          amountInput.classList.add('is-invalid');
+          amountErrorEl.textContent = 'Amount can have at most 2 decimal places.';
+          isValid = false;
+          firstInvalidField = firstInvalidField || amountInput;
+        }
+      }
+    }
+
+    // 2. Description Validation
+    const descVal = descInput.value.trim();
+    if (!descVal) {
+      descInput.classList.add('is-invalid');
+      descErrorEl.textContent = 'Please enter a description.';
+      isValid = false;
+      firstInvalidField = firstInvalidField || descInput;
+    } else if (descVal.length > 120) {
+      descInput.classList.add('is-invalid');
+      descErrorEl.textContent = 'Description cannot exceed 120 characters.';
+      isValid = false;
+      firstInvalidField = firstInvalidField || descInput;
+    }
+
+    // 3. Category Validation
+    const categoryVal = categorySelect.value;
+    if (!categoryVal || !VALID_CATEGORIES.includes(categoryVal)) {
+      categorySelect.classList.add('is-invalid');
+      categoryErrorEl.textContent = 'Please select a valid category.';
+      isValid = false;
+      firstInvalidField = firstInvalidField || categorySelect;
+    }
+
+    // 4. Date Validation (Local calendar date)
+    const dateVal = dateInput.value;
+    if (!dateVal) {
+      dateInput.classList.add('is-invalid');
+      dateErrorEl.textContent = 'Please select a valid date.';
+      isValid = false;
+      firstInvalidField = firstInvalidField || dateInput;
+    } else {
+      const parts = dateVal.split('-');
+      if (parts.length !== 3 || isNaN(Date.parse(dateVal))) {
+        dateInput.classList.add('is-invalid');
+        dateErrorEl.textContent = 'Please enter a valid calendar date.';
+        isValid = false;
+        firstInvalidField = firstInvalidField || dateInput;
+      }
+    }
+
+    if (!isValid && firstInvalidField) {
+      firstInvalidField.focus();
+    }
+
+    return isValid;
+  }
 
   function handleFormSubmit(e) {
     e.preventDefault();
 
-    if (!validateForm()) {
+    if (!validateExpenseForm()) {
       return;
     }
+
+    // Prevent accidental double submission
+    dialogSubmitBtn.disabled = true;
 
     const description = descInput.value.trim();
     const amount = parseFloat(Number(amountInput.value).toFixed(2));
     const category = categorySelect.value;
     const date = dateInput.value;
 
-    if (editingExpenseId) {
-      // Update existing expense
-      const index = expenses.findIndex((item) => item.id === editingExpenseId);
-      if (index !== -1) {
-        expenses[index] = {
-          ...expenses[index],
+    let savedExpense = null;
+    let isEditMode = Boolean(editingExpenseId);
+
+    if (isEditMode) {
+      const targetIndex = expenses.findIndex((item) => item.id === editingExpenseId);
+      if (targetIndex !== -1) {
+        expenses[targetIndex] = {
+          ...expenses[targetIndex],
           description,
           amount,
           category,
           date
         };
+        savedExpense = expenses[targetIndex];
       }
-      const editedId = editingExpenseId;
-      resetForm();
-      saveExpenses();
-      refreshAll();
-
-      // Subtle highlight of the edited item in list
-      setTimeout(() => {
-        const itemEl = document.querySelector(`.expense-item[data-id="${editedId}"]`);
-        if (itemEl) {
-          itemEl.classList.add('highlight-edit');
-          itemEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      }, 50);
     } else {
-      // Create new expense
-      const newExpense = {
+      savedExpense = {
         id: 'exp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
         description,
         amount,
@@ -492,35 +785,85 @@
         date,
         createdAt: Date.now()
       };
+      expenses.push(savedExpense);
+    }
 
-      expenses.push(newExpense);
-      resetForm();
-      saveExpenses();
-      refreshAll();
+    // Persist to localStorage
+    const saveSucceeded = saveExpenses();
+
+    if (!saveSucceeded) {
+      // Re-enable button and preserve inputs
+      dialogSubmitBtn.disabled = false;
+      return;
+    }
+
+    // Force close dialog without dirty confirmation
+    closeExpenseDialog(true);
+    refreshAll();
+
+    // Check if the saved expense is visible with current filters active
+    const isVisibleUnderFilters = doesExpenseMatchActiveFilters(savedExpense);
+
+    if (!isVisibleUnderFilters) {
+      showToast(
+        'Expense saved, but it is currently hidden by active filters.',
+        'Clear filters',
+        () => resetAllFilters()
+      );
+    } else {
+      showToast(isEditMode ? 'Changes saved.' : 'Expense added successfully.');
+
+      // Highlight the saved row in the list
+      setTimeout(() => {
+        const itemEl = document.querySelector(`.expense-item[data-id="${savedExpense.id}"]`);
+        if (itemEl) {
+          itemEl.classList.add('item-highlight');
+          itemEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 50);
     }
   }
 
-  // --- Delete Modal & Flow ---
+  // --- Delete Confirmation Flow ---
 
-  function promptDelete(id) {
+  function openDeleteConfirmation(id, triggerEl = null) {
     const expense = expenses.find((item) => item.id === id);
     if (!expense) return;
 
     pendingDeleteId = id;
+    lastFocusedTrigger = triggerEl;
 
-    // Populate preview info in modal
-    deletePreviewEl.innerHTML = `
-      <span style="color: var(--text-main);">${escapeHtml(expense.description)} (${expense.category})</span>
-      <span style="color: var(--danger);">${formatINR(expense.amount)}</span>
+    deletePreviewContent.innerHTML = `
+      <div class="delete-preview-details">
+        <span class="delete-preview-title">${escapeHtml(expense.description)}</span>
+        <span class="delete-preview-sub">${escapeHtml(expense.category)} &bull; ${formatDateDisplay(expense.date)}</span>
+      </div>
+      <span class="delete-preview-amount">${formatINR(expense.amount)}</span>
     `;
 
-    confirmModal.classList.remove('hidden');
-    modalCancelBtn.focus();
+    if (typeof deleteDialog.showModal === 'function') {
+      deleteDialog.showModal();
+    } else {
+      deleteDialog.setAttribute('open', '');
+    }
+
+    // Safer initial focus on Cancel button
+    setTimeout(() => {
+      deleteCancelBtn.focus();
+    }, 40);
   }
 
-  function closeModal() {
+  function closeDeleteConfirmation() {
     pendingDeleteId = null;
-    confirmModal.classList.add('hidden');
+    if (typeof deleteDialog.close === 'function') {
+      deleteDialog.close();
+    } else {
+      deleteDialog.removeAttribute('open');
+    }
+
+    if (lastFocusedTrigger && typeof lastFocusedTrigger.focus === 'function') {
+      lastFocusedTrigger.focus();
+    }
   }
 
   function handleConfirmDelete() {
@@ -529,64 +872,69 @@
     const idToDelete = pendingDeleteId;
     expenses = expenses.filter((item) => item.id !== idToDelete);
 
-    // If currently editing this item, cancel editing
-    if (editingExpenseId === idToDelete) {
-      resetForm();
-    }
-
     saveExpenses();
-    closeModal();
+    closeDeleteConfirmation();
     refreshAll();
+
+    showToast('Expense deleted.');
   }
 
-  function escapeHtml(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
-  // --- Realtime Input Listeners (Clear validation errors on typing) ---
-
-  descInput.addEventListener('input', () => {
-    if (descInput.classList.contains('is-invalid')) {
-      descInput.classList.remove('is-invalid');
-      descError.textContent = '';
-    }
-  });
+  // --- Real-time Input Validation Clearing ---
 
   amountInput.addEventListener('input', () => {
     if (amountInput.classList.contains('is-invalid')) {
       amountInput.classList.remove('is-invalid');
-      amountError.textContent = '';
+      amountErrorEl.textContent = '';
+    }
+  });
+
+  descInput.addEventListener('input', () => {
+    if (descInput.classList.contains('is-invalid')) {
+      descInput.classList.remove('is-invalid');
+      descErrorEl.textContent = '';
     }
   });
 
   categorySelect.addEventListener('change', () => {
     if (categorySelect.classList.contains('is-invalid')) {
       categorySelect.classList.remove('is-invalid');
-      categoryError.textContent = '';
+      categoryErrorEl.textContent = '';
     }
   });
 
   dateInput.addEventListener('input', () => {
     if (dateInput.classList.contains('is-invalid')) {
       dateInput.classList.remove('is-invalid');
-      dateError.textContent = '';
+      dateErrorEl.textContent = '';
     }
   });
 
   // --- Event Listeners ---
 
-  formEl.addEventListener('submit', handleFormSubmit);
+  // Dialog triggers
+  openAddDialogBtn.addEventListener('click', () => openAddDialog(openAddDialogBtn));
+  emptyStateAddBtn.addEventListener('click', () => openAddDialog(emptyStateAddBtn));
 
-  cancelBtn.addEventListener('click', () => {
-    resetForm();
+  dialogCloseBtn.addEventListener('click', () => closeExpenseDialog());
+  dialogCancelBtn.addEventListener('click', () => closeExpenseDialog());
+  expenseForm.addEventListener('submit', handleFormSubmit);
+
+  // Discard Confirmation Dialog buttons
+  discardStayBtn.addEventListener('click', () => {
+    closeDiscardDialog();
+    amountInput.focus();
   });
 
-  // Search & Filter Events
+  discardConfirmBtn.addEventListener('click', () => {
+    closeDiscardDialog();
+    closeExpenseDialog(true);
+  });
+
+  // Delete Dialog buttons
+  deleteCancelBtn.addEventListener('click', closeDeleteConfirmation);
+  deleteConfirmBtn.addEventListener('click', handleConfirmDelete);
+
+  // Search & Filter Listeners
   searchInput.addEventListener('input', () => {
     renderList();
   });
@@ -601,48 +949,83 @@
     renderList();
   });
 
-  // Empty state button: Focuses description in form
-  emptyAddBtn.addEventListener('click', () => {
-    formEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    descInput.focus();
-  });
-
-  // Reset filters button
-  resetFiltersBtn.addEventListener('click', () => {
-    searchInput.value = '';
-    filterCategorySelect.value = 'ALL';
+  filterDateSelect.addEventListener('change', () => {
+    if (filterDateSelect.value === 'CUSTOM') {
+      customDateContainer.classList.remove('hidden');
+      if (!customDateStartInput.value) customDateStartInput.value = getTodayDateString();
+      if (!customDateEndInput.value) customDateEndInput.value = getTodayDateString();
+    } else {
+      customDateContainer.classList.add('hidden');
+      customDateErrorEl.textContent = '';
+    }
     renderList();
   });
 
-  // Delete modal actions
-  modalCancelBtn.addEventListener('click', closeModal);
-  modalConfirmBtn.addEventListener('click', handleConfirmDelete);
+  // Custom Date range change & validation
+  function handleCustomDateChange() {
+    const startVal = customDateStartInput.value;
+    const endVal = customDateEndInput.value;
 
-  // Close modal when clicking on overlay backdrop
-  confirmModal.addEventListener('click', (e) => {
-    if (e.target === confirmModal) {
-      closeModal();
+    if (startVal && endVal && startVal > endVal) {
+      customDateErrorEl.textContent = 'Start date cannot be after end date.';
+    } else {
+      customDateErrorEl.textContent = '';
+      renderList();
     }
-  });
+  }
 
-  // Keyboard navigation for modal (Escape closes modal)
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !confirmModal.classList.contains('hidden')) {
-      closeModal();
-    }
+  customDateStartInput.addEventListener('change', handleCustomDateChange);
+  customDateEndInput.addEventListener('change', handleCustomDateChange);
+
+  // Reset Filters CTAs
+  resetAllFiltersBtn.addEventListener('click', resetAllFilters);
+  noResultsClearBtn.addEventListener('click', resetAllFilters);
+
+  // Backdrop click handling for native <dialog>
+  [expenseDialog, deleteDialog, discardDialog].forEach((dlg) => {
+    dlg.addEventListener('click', (e) => {
+      // If clicked on backdrop (target === dialog itself and coordinates outside dialog content box)
+      if (e.target === dlg) {
+        const rect = dlg.getBoundingClientRect();
+        const isInDialog = (
+          rect.top <= e.clientY &&
+          e.clientY <= rect.top + rect.height &&
+          rect.left <= e.clientX &&
+          e.clientX <= rect.left + rect.width
+        );
+
+        if (!isInDialog) {
+          if (dlg === expenseDialog) {
+            closeExpenseDialog();
+          } else if (dlg === deleteDialog) {
+            closeDeleteConfirmation();
+          } else if (dlg === discardDialog) {
+            closeDiscardDialog();
+          }
+        }
+      }
+    });
+
+    // Native cancel event (triggered by Escape key)
+    dlg.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      if (dlg === expenseDialog) {
+        closeExpenseDialog();
+      } else if (dlg === deleteDialog) {
+        closeDeleteConfirmation();
+      } else if (dlg === discardDialog) {
+        closeDiscardDialog();
+      }
+    });
   });
 
   // --- Initialization ---
 
   function init() {
     loadExpenses();
-
-    // Default form date to today
-    dateInput.value = getTodayDateString();
-
-    refreshAll();
+    updateSummaryMetrics();
+    renderList();
   }
 
   init();
 })();
-
