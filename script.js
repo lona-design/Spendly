@@ -193,21 +193,6 @@
   }
 
   /**
-   * Return category badge class.
-   */
-  function getCategoryBadgeClass(category) {
-    const cat = (category || '').toLowerCase();
-    switch (cat) {
-      case 'food': return 'cat-badge-food';
-      case 'transport': return 'cat-badge-transport';
-      case 'shopping': return 'cat-badge-shopping';
-      case 'bills': return 'cat-badge-bills';
-      case 'health': return 'cat-badge-health';
-      default: return 'cat-badge-other';
-    }
-  }
-
-  /**
    * Escape HTML strings when rendering dynamically to prevent XSS.
    */
   function escapeHtml(str) {
@@ -265,10 +250,22 @@
   /**
    * Show a non-blocking toast notification.
    */
+  // Inline SVG paths for toast icons (feedback never relies on colour alone)
+  const TOAST_ICONS = {
+    success: '<polyline points="20 6 9 17 4 12"></polyline>',
+    error: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>',
+    info: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>'
+  };
+
   function showToast(message, actionLabel = null, actionCallback = null, type = 'info', duration = 4000) {
     const toast = document.createElement('div');
-    toast.className = 'toast';
+    toast.className = `toast toast-${type}`;
     toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+
+    toast.insertAdjacentHTML(
+      'beforeend',
+      `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TOAST_ICONS[type] || TOAST_ICONS.info}</svg>`
+    );
 
     const msgSpan = document.createElement('span');
     msgSpan.className = 'toast-message';
@@ -278,7 +275,7 @@
     if (actionLabel && typeof actionCallback === 'function') {
       const actionBtn = document.createElement('button');
       actionBtn.type = 'button';
-      actionBtn.className = 'toast-action-btn';
+      actionBtn.className = 'btn btn-ghost btn-sm toast-action-btn';
       actionBtn.textContent = actionLabel;
       actionBtn.addEventListener('click', () => {
         actionCallback();
@@ -296,9 +293,8 @@
     function removeToast(el) {
       clearTimeout(timer);
       if (!el.parentNode) return;
+      el.style.transition = 'opacity 0.16s ease';
       el.style.opacity = '0';
-      el.style.transform = 'translateY(8px)';
-      el.style.transition = 'opacity 0.16s ease, transform 0.16s ease';
       setTimeout(() => {
         if (el.parentNode) {
           el.parentNode.removeChild(el);
@@ -421,6 +417,11 @@
       clearSearchBtn.classList.add('hidden');
     }
 
+    // Mark individual filter fields as selected (plum styling hook)
+    searchInput.closest('.filter-field').classList.toggle('is-active', searchInput.value.trim().length > 0);
+    filterCategorySelect.closest('.filter-field').classList.toggle('is-active', filterCategorySelect.value !== 'ALL');
+    filterDateSelect.closest('.filter-field').classList.toggle('is-active', filterDateSelect.value !== 'ALL');
+
     // Toggle active filter status bar
     if (filterActive) {
       filterStatusBar.classList.remove('hidden');
@@ -473,7 +474,7 @@
 
         <div class="col-meta-wrapper">
           <div class="col-cat">
-            <span class="category-badge ${getCategoryBadgeClass(expense.category)}">
+            <span class="category-badge">
               ${escapeHtml(expense.category)}
             </span>
           </div>
@@ -487,10 +488,10 @@
         </div>
 
         <div class="col-actions">
-          <button type="button" class="btn btn-row-action btn-row-edit" data-action="edit" data-id="${expense.id}" aria-label="Edit expense: ${escapeHtml(expense.description)}">
+          <button type="button" class="btn btn-ghost btn-sm" data-action="edit" data-id="${expense.id}" aria-label="Edit expense: ${escapeHtml(expense.description)}">
             Edit
           </button>
-          <button type="button" class="btn btn-row-action btn-row-delete" data-action="delete" data-id="${expense.id}" aria-label="Delete expense: ${escapeHtml(expense.description)}">
+          <button type="button" class="btn btn-danger-ghost btn-sm" data-action="delete" data-id="${expense.id}" aria-label="Delete expense: ${escapeHtml(expense.description)}">
             Delete
           </button>
         </div>
@@ -811,7 +812,7 @@
         () => resetAllFilters()
       );
     } else {
-      showToast(isEditMode ? 'Changes saved.' : 'Expense added successfully.');
+      showToast(isEditMode ? 'Changes saved.' : 'Expense added successfully.', null, null, 'success');
 
       // Highlight the saved row in the list
       setTimeout(() => {
@@ -876,7 +877,7 @@
     closeDeleteConfirmation();
     refreshAll();
 
-    showToast('Expense deleted.');
+    showToast('Expense deleted.', null, null, 'success');
   }
 
   // --- Real-time Input Validation Clearing ---

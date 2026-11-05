@@ -1,95 +1,149 @@
 /* ==========================================================================
-   PocketLog — Calm, Premium, Refined Expense Tracker Styling
+   PocketLog — Design System & UI Styles
+   --------------------------------------------------------------------------
+   COLOUR ROLES (the core rule)
+     --action-*            Forest green. ONLY for high-emphasis, non-destructive
+                           action buttons (.btn-primary): Add expense, Add your
+                           first expense, Save expense / Save changes.
+                           Never for cards, amounts, headings, badges, icons,
+                           filters, rows or success messages.
+     --accent-secondary-*  Muted plum. Supporting icons, selected/active filter
+                           states, small accents in summary cards, pale
+                           highlight backgrounds. Text on pale plum uses
+                           --accent-secondary-strong.
+     --surface-* / --text-* / --border-*
+                           Warm neutrals. Page structure and everyday content.
+     --danger-*            Destructive actions and errors (semantic exception).
+
+   BORDERS
+     --border-subtle   Decorative dividers and card outlines only.
+     --border-control  Essential input/select boundaries (>= 3:1 on white).
+
+   COMPONENT RULES
+     Buttons   .btn + one of .btn-primary | .btn-secondary | .btn-ghost |
+               .btn-danger-ghost (row actions) | .btn-destructive (final
+               confirmation). Add .btn-sm for compact rows. One primary per
+               action group. Height stays stable across states.
+     Controls  48px tall, 16px text, 8px radius, visible label above.
+     Cards     12px radius, 24px padding (16px on phones), subtle border, no
+               floating shadow. Dialogs: 16px radius + --shadow-overlay.
+     Badges    Neutral pill with a text label; no per-category colours.
+     Focus     2px --focus-ring outline, 2px offset, on every interactive
+               element.
+
+   SECTIONS
+     1. Design tokens   2. Base & typography   3. Layout
+     4. Shared components   5. Component states
+     6. Responsive rules    7. Reduced motion
    ========================================================================== */
 
-/* Design Tokens & CSS Custom Properties */
+
+/* ==========================================================================
+   1. DESIGN TOKENS
+   ========================================================================== */
 :root {
-  /* Warm, Refined Palette */
-  --bg-page: #F6F5F1;            /* Warm ivory background */
-  --surface-card: #FFFFFF;       /* Pure white main surfaces */
-  --surface-subtle: #FDFDFC;     /* Ultra-subtle hover/tint */
-  --surface-muted: #F0EFEA;      /* Warm muted fill for inputs/previews */
-  
-  /* Text Contrast Hierarchy */
-  --text-primary: #202823;       /* High-contrast deep slate text */
-  --text-secondary: #606A62;     /* Balanced secondary descriptive text */
-  --text-muted: #7E8880;         /* Supporting labels, captions */
-  --text-inverse: #FFFFFF;       /* Text on deep green background */
-  --text-inverse-subtle: #D2DDD0;/* Subtitle on deep green background */
+  /* --- Colour: primary actions only --- */
+  --action-primary: #244B3B;
+  --action-primary-hover: #1D3F31;
+  --action-primary-pressed: #153025;
+  --action-on-primary: #FFFFFF;
 
-  /* Primary Accent: Deep Forest Green */
-  --accent-primary: #244B3B;
-  --accent-primary-hover: #1A382C;
-  --accent-primary-active: #142E24;
-  --accent-soft: #E8EEE7;
-  --accent-soft-hover: #DDE5DC;
-  --accent-focus-ring: rgba(36, 75, 59, 0.25);
+  /* --- Colour: secondary accent & selected states --- */
+  --accent-secondary: #6F617C;
+  --accent-secondary-strong: #4E425B;
+  --accent-secondary-soft: #F0ECF4;
+  --accent-secondary-soft-hover: #E7DFED;
 
-  /* Destructive Actions */
-  --destructive: #B43A3A;
-  --destructive-hover: #962F2F;
-  --destructive-active: #7A2424;
-  --destructive-soft: #FDF2F2;
-  --destructive-border: #F5C2C2;
-  --destructive-focus-ring: rgba(180, 58, 58, 0.25);
+  /* --- Colour: surfaces --- */
+  --surface-page: #F7F6F2;
+  --surface-card: #FFFFFF;
+  --surface-muted: #F1F0EC;
+  --surface-hover: #F4F2F6;
 
-  /* Subtle Structural Borders */
-  --border-color: #E1E4DC;
-  --border-subtle: #ECEEE7;
-  --border-strong: #C8CCC2;
+  /* --- Colour: text --- */
+  --text-primary: #24262B;
+  --text-secondary: #666A73;
+  --text-disabled: #62666E;          /* darkened from #71757D: 4.66:1 on --disabled-background */
 
-  /* Understated Category Badge Palette */
-  --cat-food-bg: #F7EFE6;
-  --cat-food-text: #8C4A1E;
-  --cat-food-border: #EADBCE;
+  /* --- Colour: borders & focus --- */
+  --border-subtle: #E4E1DB;          /* decorative dividers */
+  --border-control: #82838B;         /* essential control boundaries */
+  --focus-ring: #4E425B;
 
-  --cat-transport-bg: #EAF0F2;
-  --cat-transport-text: #2C5E70;
-  --cat-transport-border: #D1DEE3;
+  /* --- Colour: destructive & error --- */
+  --danger: #B42318;
+  --danger-hover: #912018;
+  --danger-soft: #FEF3F2;
 
-  --cat-shopping-bg: #F3EEF5;
-  --cat-shopping-text: #6B3D7A;
-  --cat-shopping-border: #E3D9E8;
+  /* --- Colour: disabled controls --- */
+  --disabled-background: #E9E7E2;
 
-  --cat-bills-bg: #F8ECEC;
-  --cat-bills-text: #8F3434;
-  --cat-bills-border: #EED4D4;
+  /* --- Overlay --- */
+  --overlay-backdrop: rgba(36, 38, 43, 0.45);
 
-  --cat-health-bg: #E8F1EC;
-  --cat-health-text: #28634A;
-  --cat-health-border: #D0E3D7;
+  /* --- Typography --- */
+  --font-family-base: "Satoshi", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
 
-  --cat-other-bg: #EFEFEA;
-  --cat-other-text: #4F5551;
-  --cat-other-border: #DCDCD4;
+  --font-size-metric: 2.5rem;        /* 40px */
+  --line-height-metric: 2.75rem;     /* 44px */
+  --font-size-metric-sm: 2rem;       /* 32px (phones) */
+  --line-height-metric-sm: 2.375rem; /* 38px */
+  --font-size-page-heading: 1.75rem; /* 28px */
+  --line-height-page-heading: 2.25rem; /* 36px */
+  --font-size-section-heading: 1.25rem; /* 20px */
+  --line-height-section-heading: 1.75rem; /* 28px */
+  --font-size-body: 1rem;            /* 16px */
+  --line-height-body: 1.5rem;        /* 24px */
+  --font-size-label: 0.875rem;       /* 14px */
+  --line-height-label: 1.25rem;      /* 20px */
+  --font-size-button: 0.9375rem;     /* 15px */
+  --line-height-button: 1.25rem;     /* 20px */
+  --font-size-support: 0.875rem;     /* 14px */
+  --line-height-support: 1.25rem;    /* 20px */
 
-  /* Typography: System Sans-Serif Stack (No external dependencies) */
-  --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --letter-spacing-tight: -0.02em;   /* large headings & metrics only */
 
-  /* Restrained Spacing & Radii (8px grid) */
-  --space-1: 0.25rem;  /* 4px */
-  --space-2: 0.5rem;   /* 8px */
+  /* --- Spacing scale: 4, 8, 12, 16, 24, 32, 48, 64 --- */
+  --space-1: 0.25rem;  /* 4px  */
+  --space-2: 0.5rem;   /* 8px  */
   --space-3: 0.75rem;  /* 12px */
   --space-4: 1rem;     /* 16px */
-  --space-5: 1.25rem;  /* 20px */
   --space-6: 1.5rem;   /* 24px */
   --space-8: 2rem;     /* 32px */
-  --space-10: 2.5rem;  /* 40px */
+  --space-12: 3rem;    /* 48px */
+  --space-16: 4rem;    /* 64px */
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-full: 9999px;
+  /* --- Sizing --- */
+  --control-height: 3rem;            /* 48px inputs & selects */
+  --button-height: 2.75rem;          /* 44px buttons */
+  --touch-target: 2.75rem;           /* 44px minimum */
+  --icon-size: 1rem;                 /* 16px UI icons */
+  --content-max-width: 67.5rem;      /* 1080px */
 
-  /* Subtle, Calm Elevation */
-  --shadow-subtle: 0 1px 3px rgba(32, 40, 35, 0.04), 0 1px 2px rgba(32, 40, 35, 0.02);
-  --shadow-card: 0 2px 6px rgba(32, 40, 35, 0.05), 0 1px 2px rgba(32, 40, 35, 0.03);
-  --shadow-modal: 0 16px 36px -8px rgba(32, 40, 35, 0.16), 0 4px 12px rgba(32, 40, 35, 0.06);
+  /* --- Radii --- */
+  --radius-control: 8px;             /* buttons, inputs */
+  --radius-card: 12px;               /* cards, panels */
+  --radius-dialog: 16px;             /* dialogs */
+  --radius-pill: 999px;              /* compact chips & badges */
 
-  --transition-fast: 0.16s ease;
+  /* --- Shadows --- */
+  --shadow-card: 0 1px 2px rgba(36, 38, 43, 0.04);
+  --shadow-overlay: 0 16px 40px -8px rgba(36, 38, 43, 0.18), 0 4px 12px rgba(36, 38, 43, 0.06);
+
+  /* --- Motion --- */
+  --duration-fast: 120ms;
+  --duration-base: 160ms;
+  --duration-slow: 180ms;
+  --ease-standard: ease;
 }
 
-/* Global Reset */
+
+/* ==========================================================================
+   2. BASE STYLES & TYPOGRAPHY
+   ========================================================================== */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -97,65 +151,122 @@
 }
 
 html {
-  font-size: 16px;
+  font-size: 100%; /* respect the user's browser font-size setting */
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
-  background-color: var(--bg-page);
+  background-color: var(--surface-page);
 }
 
 body {
-  font-family: var(--font-system);
-  background-color: var(--bg-page);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  font-weight: var(--font-weight-regular);
   color: var(--text-primary);
-  line-height: 1.5;
+  background-color: var(--surface-page);
   min-height: 100vh;
-  padding: var(--space-8) var(--space-6) var(--space-10);
+  padding: var(--space-8) var(--space-6) var(--space-12);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-synthesis: none; /* only the loaded 400/500/700 weights; no faux bold */
 }
 
-/* Tabular Numerals for Currency & Counts */
+/* Form controls don't inherit fonts by default */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+svg {
+  flex-shrink: 0;
+}
+
+/* Typography roles */
+.text-metric {
+  font-size: var(--font-size-metric);
+  line-height: var(--line-height-metric);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+.text-page-heading {
+  font-size: var(--font-size-page-heading);
+  line-height: var(--line-height-page-heading);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+.text-section-heading {
+  font-size: var(--font-size-section-heading);
+  line-height: var(--line-height-section-heading);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.01em;
+}
+
+.text-label {
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  font-weight: var(--font-weight-medium);
+}
+
+.text-support {
+  font-size: var(--font-size-support);
+  line-height: var(--line-height-support);
+  font-weight: var(--font-weight-regular);
+  color: var(--text-secondary);
+}
+
+/* Financial figures */
+.tabular-nums,
 .summary-value,
 .results-subtotal-text strong,
 .col-amount,
-.expense-item-amount,
-.delete-preview-amount {
+.delete-preview-amount,
+#expense-amount {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
 }
 
-/* Centred Application Layout (around 1080px wide) */
+
+/* ==========================================================================
+   3. LAYOUT
+   ========================================================================== */
 .app-shell {
-  max-width: 1080px;
+  max-width: var(--content-max-width);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-8);
 }
 
-/* ==========================================================================
-   Header: PocketLog Branding & Primary Action
-   ========================================================================== */
+/* Header */
 .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding-bottom: var(--space-2);
 }
 
 .header-left {
   display: flex;
+  flex-wrap: wrap; /* logo and wordmark stack at very large text sizes */
   align-items: center;
-  gap: 0.875rem;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.brand-text {
+  min-width: 0;
 }
 
 .brand-logo {
-  width: 42px;
-  height: 42px;
-  background-color: var(--accent-primary);
-  color: var(--text-inverse);
-  border-radius: var(--radius-md);
+  width: var(--space-12);
+  height: var(--space-12);
+  border-radius: var(--radius-card);
+  background-color: var(--accent-secondary-soft);
+  color: var(--accent-secondary-strong);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -163,92 +274,27 @@ body {
 }
 
 .brand-title {
-  font-size: 1.375rem; /* ~22px */
-  font-weight: 700;
-  letter-spacing: -0.025em;
+  font-size: var(--font-size-page-heading);
+  line-height: var(--line-height-page-heading);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-tight);
   color: var(--text-primary);
-  line-height: 1.15;
 }
 
 .brand-tagline {
-  font-size: 0.84375rem; /* ~13.5px */
+  font-size: var(--font-size-support);
+  line-height: var(--line-height-support);
   color: var(--text-secondary);
-  line-height: 1.3;
 }
 
-/* ==========================================================================
-   Summary Area: Spent This Month, All-Time, Total Expenses
-   ========================================================================== */
+/* Summary grid */
 .summary-section {
   display: grid;
   grid-template-columns: 1.35fr 1fr 1fr;
   gap: var(--space-4);
 }
 
-.summary-card {
-  background-color: var(--surface-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: var(--space-6) var(--space-6);
-  box-shadow: var(--shadow-subtle);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 128px;
-}
-
-.summary-card-inner {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.summary-label {
-  font-size: 0.8125rem; /* ~13px */
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-}
-
-.summary-value {
-  font-size: clamp(1.75rem, 2.5vw, 2.25rem); /* ~28-36px */
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  color: var(--text-primary);
-  line-height: 1.15;
-}
-
-.summary-caption {
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-  margin-top: 0.125rem;
-}
-
-/* Primary Featured Card: Spent This Month */
-.summary-card-featured {
-  background-color: var(--accent-primary);
-  border-color: var(--accent-primary);
-  color: var(--text-inverse);
-  box-shadow: 0 4px 14px rgba(36, 75, 59, 0.18);
-}
-
-.summary-card-featured .summary-label {
-  color: var(--text-inverse-subtle);
-}
-
-.summary-card-featured .summary-value {
-  color: var(--text-inverse);
-  font-size: clamp(2rem, 3.2vw, 2.5rem); /* ~32-40px desktop emphasis */
-}
-
-.summary-card-featured .summary-caption {
-  color: var(--text-inverse-subtle);
-}
-
-/* ==========================================================================
-   Expenses Section (List, Filter Toolbar, Results Subtotal)
-   ========================================================================== */
+/* Main content */
 .app-main {
   display: flex;
   flex-direction: column;
@@ -271,102 +317,286 @@ body {
 .expenses-heading-block {
   display: flex;
   align-items: baseline;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
   flex-wrap: wrap;
 }
 
-.section-title {
-  font-size: 1.375rem; /* ~22px */
-  font-weight: 700;
+/* Footer */
+.app-footer {
+  text-align: center;
+  padding-top: var(--space-4);
+}
+
+.footer-trust {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.footer-primary-text {
+  font-size: var(--font-size-support);
+  line-height: var(--line-height-support);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+}
+
+.footer-secondary-text {
+  font-size: var(--font-size-support);
+  line-height: var(--line-height-support);
+  color: var(--text-secondary);
+}
+
+
+/* ==========================================================================
+   4. SHARED COMPONENTS
+   ========================================================================== */
+
+/* --- 4.1 Card --- */
+.card,
+.summary-card,
+.toolbar-card,
+.expenses-container {
+  background-color: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+/* --- 4.2 Summary cards --- */
+.summary-card {
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.summary-card-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.summary-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+}
+
+.summary-value {
+  font-size: var(--font-size-page-heading);
+  line-height: var(--line-height-page-heading);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-tight);
   color: var(--text-primary);
-  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.summary-caption {
+  font-size: var(--font-size-support);
+  line-height: var(--line-height-support);
+  color: var(--text-secondary);
+}
+
+/* Featured card: pale plum surface, charcoal amount */
+.summary-card-featured {
+  background-color: var(--accent-secondary-soft);
+  border-color: var(--accent-secondary-soft-hover);
+}
+
+.summary-card-featured .summary-label {
+  color: var(--accent-secondary-strong);
+}
+
+/* Small plum accent marker */
+.summary-card-featured .summary-label::before {
+  content: "";
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background-color: var(--accent-secondary);
+}
+
+.summary-card-featured .summary-value {
+  font-size: var(--font-size-metric);
+  line-height: var(--line-height-metric);
+}
+
+/* --- 4.3 Section heading & result meta --- */
+.section-title {
+  font-size: var(--font-size-section-heading);
+  line-height: var(--line-height-section-heading);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
 }
 
 .results-meta {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
   display: inline-flex;
   align-items: baseline;
-  gap: 0.4rem;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--font-size-support);
+  line-height: var(--line-height-support);
+  color: var(--text-secondary);
 }
 
 .results-separator {
-  color: var(--border-strong);
+  color: var(--border-control);
 }
 
 .results-subtotal-text strong {
+  font-weight: var(--font-weight-bold);
   color: var(--text-primary);
-  font-weight: 700;
 }
 
-/* Toolbar: Search & Filters */
-.toolbar-card {
+/* --- 4.4 Buttons --- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--button-height);
+  padding: 0 var(--space-4);
+  font-family: inherit;
+  font-size: var(--font-size-button);
+  line-height: var(--line-height-button);
+  font-weight: var(--font-weight-bold);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background-color: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  text-decoration: none;
+  transition:
+    background-color var(--duration-base) var(--ease-standard),
+    border-color var(--duration-base) var(--ease-standard),
+    color var(--duration-base) var(--ease-standard);
+}
+
+.btn svg {
+  width: var(--icon-size);
+  height: var(--icon-size);
+}
+
+/* Primary: forest green — the only place green is used */
+.btn-primary {
+  background-color: var(--action-primary);
+  color: var(--action-on-primary);
+}
+
+/* Secondary: white surface, charcoal text, subtle border */
+.btn-secondary {
   background-color: var(--surface-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4) var(--space-5);
-  box-shadow: var(--shadow-subtle);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
 }
 
-.toolbar-grid {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr 1fr;
-  gap: var(--space-4);
-  align-items: end;
+/* Ghost: transparent, charcoal text */
+.btn-ghost {
+  background-color: transparent;
+  color: var(--text-primary);
 }
 
-.filter-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+/* Danger ghost: ordinary destructive row action */
+.btn-danger-ghost {
+  background-color: transparent;
+  color: var(--danger);
 }
 
-.field-label {
-  font-size: 0.8125rem;
-  font-weight: 600;
+/* Destructive: final confirmation */
+.btn-destructive {
+  background-color: var(--danger);
+  color: var(--action-on-primary);
+}
+
+/* Compact size for list rows and bars (still 44px tall for touch) */
+.btn-sm {
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+}
+
+/* Icon-only button (dialog close) */
+.btn-icon {
+  width: var(--touch-target);
+  height: var(--touch-target);
+  border: none;
+  border-radius: var(--radius-control);
+  background-color: transparent;
   color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-base) var(--ease-standard),
+    color var(--duration-base) var(--ease-standard);
 }
 
-/* Inputs & Selects */
+/* --- 4.5 Form fields --- */
+.filter-field,
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.field-label,
+.form-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.required {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
 input[type="text"],
 input[type="number"],
 input[type="date"],
 select {
   width: 100%;
-  height: 44px;
-  padding: 0 0.875rem;
+  height: var(--control-height);
+  padding: 0 var(--space-3);
   font-family: inherit;
-  font-size: 0.9375rem; /* 15-16px */
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  font-weight: var(--font-weight-regular);
   color: var(--text-primary);
   background-color: var(--surface-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  outline: none;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-control);
   -webkit-appearance: none;
   appearance: none;
-}
-
-input:focus,
-select:focus {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+  transition:
+    border-color var(--duration-base) var(--ease-standard),
+    background-color var(--duration-base) var(--ease-standard);
 }
 
 input::placeholder {
-  color: var(--text-muted);
+  color: var(--text-secondary);
+  opacity: 1;
 }
 
-/* Custom Select Dropdown Arrow */
 select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23606A62' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.875rem center;
-  padding-right: 2.25rem;
+  padding-right: var(--space-12);
   cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666A73' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
 }
 
 /* Search input with leading icon and clear button */
@@ -378,178 +608,205 @@ select {
 
 .field-icon {
   position: absolute;
-  left: 0.875rem;
-  color: var(--text-muted);
+  left: var(--space-3);
+  width: var(--icon-size);
+  height: var(--icon-size);
+  color: var(--text-secondary);
   pointer-events: none;
 }
 
 .input-with-icon input {
-  padding-left: 2.35rem;
-  padding-right: 2.25rem;
+  padding-left: calc(var(--space-3) + var(--icon-size) + var(--space-2));
+  padding-right: var(--space-12);
 }
 
 .btn-clear {
   position: absolute;
-  right: 0.5rem;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
+  right: 2px;
+  width: var(--touch-target);
+  height: var(--touch-target);
   border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 1.25rem;
-  line-height: 1;
+  border-radius: var(--radius-control);
+  background-color: transparent;
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--duration-base) var(--ease-standard),
+    color var(--duration-base) var(--ease-standard);
 }
 
-.btn-clear:hover {
-  background-color: var(--surface-muted);
-  color: var(--text-primary);
+/* Amount field: currency prefix */
+.amount-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
-/* Custom Date Range Sub-Grid */
-.custom-date-grid {
+.currency-symbol {
+  position: absolute;
+  left: var(--space-3);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.amount-input-wrapper input {
+  padding-left: calc(var(--space-3) + var(--space-4));
+  font-weight: var(--font-weight-medium);
+}
+
+/* Inline field errors (icon + text, never colour alone) */
+.field-error,
+.custom-date-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  font-size: var(--font-size-support);
+  line-height: var(--line-height-support);
+  font-weight: var(--font-weight-medium);
+  color: var(--danger);
+}
+
+.field-error:empty,
+.custom-date-error:empty {
+  display: none;
+}
+
+.field-error::before,
+.custom-date-error::before {
+  content: "";
+  flex-shrink: 0;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  margin-top: 2px;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='8' x2='12' y2='12'/%3E%3Cline x1='12' y1='16' x2='12.01' y2='16'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='8' x2='12' y2='12'/%3E%3Cline x1='12' y1='16' x2='12.01' y2='16'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* --- 4.6 Toolbar (search & filters) --- */
+.toolbar-card {
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.toolbar-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 1.5fr 1fr 1fr;
   gap: var(--space-4);
   align-items: end;
-  padding-top: var(--space-3);
-  border-top: 1px dashed var(--border-subtle);
+}
+
+.custom-date-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-4);
+  align-items: start;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .custom-date-actions {
   display: flex;
   align-items: center;
-  min-height: 44px;
+  min-height: var(--control-height);
+  margin-top: calc(var(--line-height-label) + var(--space-2));
 }
 
-.custom-date-error {
-  font-size: 0.8125rem;
-  color: var(--destructive);
-  font-weight: 500;
-}
-
-/* Active Filter Status Bar */
 .filter-status-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: var(--space-2);
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
   border-top: 1px solid var(--border-subtle);
 }
 
+/* Compact chip: "Filters active" */
+.chip,
 .active-filter-indicator {
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--accent-primary);
-  background-color: var(--accent-soft);
-  padding: 0.2rem 0.55rem;
-  border-radius: var(--radius-sm);
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  font-weight: var(--font-weight-medium);
+  color: var(--accent-secondary-strong);
+  background-color: var(--accent-secondary-soft);
+  border-radius: var(--radius-pill);
 }
 
-.btn-text {
-  background: none;
-  border: none;
-  font-family: inherit;
-  font-size: 0.84375rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius-sm);
+.active-filter-indicator svg {
+  width: 14px;
+  height: 14px;
 }
 
-.btn-text:hover {
-  color: var(--text-primary);
-}
-
-/* ==========================================================================
-   Expenses Container & List Rows
-   ========================================================================== */
+/* --- 4.7 Expense list --- */
 .expenses-container {
-  background-color: var(--surface-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-subtle);
   overflow: hidden;
 }
 
-/* Desktop Header Alignment */
-.desktop-list-header {
+.desktop-list-header,
+.expense-item {
   display: grid;
-  grid-template-columns: 2.2fr 1.2fr 1.1fr 1.2fr 120px;
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(0, 1.2fr) auto;
   align-items: center;
-  gap: var(--space-3);
-  padding: 0.875rem 1.25rem;
-  background-color: var(--bg-page);
-  border-bottom: 1px solid var(--border-color);
-  font-size: 0.78125rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-6);
 }
 
-.desktop-list-header .col-amount {
-  text-align: right;
+.desktop-list-header {
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  background-color: var(--surface-muted);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .desktop-list-header .col-actions {
-  text-align: right;
+  /* reserve the width of two compact row buttons so columns align */
+  min-width: 8.5rem;
+  justify-content: flex-end;
 }
 
-/* Expense List */
 .expense-list {
   list-style: none;
   display: flex;
   flex-direction: column;
 }
 
-/* Expense Row (Desktop Grid: 5 columns) */
 .expense-item {
-  display: grid;
-  grid-template-columns: 2.2fr 1.2fr 1.1fr 1.2fr 120px;
-  align-items: center;
-  padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--border-subtle);
-  gap: var(--space-3);
-  transition: background-color var(--transition-fast);
+  transition: background-color var(--duration-base) var(--ease-standard);
 }
 
 .expense-item:last-child {
   border-bottom: none;
 }
 
-.expense-item:hover {
-  background-color: var(--surface-subtle);
-}
-
-.expense-item.item-highlight {
-  animation: rowHighlight 1.5s ease-out;
-}
-
-@keyframes rowHighlight {
-  0% { background-color: var(--accent-soft); }
-  100% { background-color: transparent; }
-}
-
 .col-desc {
-  font-size: 0.9375rem;
-  font-weight: 600;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
-/* On desktop, .col-meta-wrapper unwraps so its children (.col-cat and .col-date) occupy columns 2 and 3 */
+.desktop-list-header .col-desc {
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  color: var(--text-secondary);
+}
+
+/* On desktop the wrapper unwraps so category & date occupy grid columns */
 .col-meta-wrapper {
   display: contents;
 }
@@ -557,199 +814,61 @@ select {
 .col-cat {
   display: flex;
   align-items: center;
-}
-
-/* Subtle, Understated Category Badges */
-.category-badge {
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1;
-  padding: 0.28rem 0.55rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  white-space: nowrap;
-}
-
-.cat-badge-food {
-  background-color: var(--cat-food-bg);
-  color: var(--cat-food-text);
-  border-color: var(--cat-food-border);
-}
-
-.cat-badge-transport {
-  background-color: var(--cat-transport-bg);
-  color: var(--cat-transport-text);
-  border-color: var(--cat-transport-border);
-}
-
-.cat-badge-shopping {
-  background-color: var(--cat-shopping-bg);
-  color: var(--cat-shopping-text);
-  border-color: var(--cat-shopping-border);
-}
-
-.cat-badge-bills {
-  background-color: var(--cat-bills-bg);
-  color: var(--cat-bills-text);
-  border-color: var(--cat-bills-border);
-}
-
-.cat-badge-health {
-  background-color: var(--cat-health-bg);
-  color: var(--cat-health-text);
-  border-color: var(--cat-health-border);
-}
-
-.cat-badge-other {
-  background-color: var(--cat-other-bg);
-  color: var(--cat-other-text);
-  border-color: var(--cat-other-border);
+  min-width: 0;
 }
 
 .col-date {
-  font-size: 0.875rem;
+  font-size: var(--font-size-support);
+  line-height: var(--line-height-support);
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .col-amount {
-  font-size: 1.0625rem;
-  font-weight: 700;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  font-weight: var(--font-weight-bold);
   color: var(--text-primary);
   text-align: right;
   white-space: nowrap;
+}
+
+.desktop-list-header .col-amount {
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
 }
 
 .col-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.375rem;
+  gap: var(--space-1);
+  min-width: 8.5rem;
 }
 
-/* ==========================================================================
-   Buttons (Visually distinct, >= 44px touch targets where interactive)
-   ========================================================================== */
-.btn {
+/* --- 4.8 Badge (neutral, text label) --- */
+.badge,
+.category-badge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  min-height: 44px;
-  padding: 0 1.125rem;
-  font-family: inherit;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  border-radius: var(--radius-md);
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  user-select: none;
+  max-width: 100%;
+  padding: 2px var(--space-3);
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  background-color: var(--surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.btn:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-}
-
-/* Primary Button (Deep Forest Green) */
-.btn-primary {
-  background-color: var(--accent-primary);
-  color: var(--text-inverse);
-  box-shadow: 0 1px 2px rgba(36, 75, 59, 0.2);
-}
-
-.btn-primary:hover {
-  background-color: var(--accent-primary-hover);
-}
-
-.btn-primary:active {
-  background-color: var(--accent-primary-active);
-  transform: translateY(1px);
-}
-
-/* Secondary Button (Warm neutral surface) */
-.btn-secondary {
-  background-color: var(--surface-muted);
-  color: var(--text-primary);
-  border-color: var(--border-color);
-}
-
-.btn-secondary:hover {
-  background-color: var(--border-color);
-  color: var(--text-primary);
-}
-
-/* Destructive Button */
-.btn-destructive {
-  background-color: var(--destructive);
-  color: var(--text-inverse);
-}
-
-.btn-destructive:hover {
-  background-color: var(--destructive-hover);
-}
-
-.btn-destructive:focus-visible {
-  outline-color: var(--destructive);
-}
-
-/* Row Action Buttons (Edit / Delete) */
-.btn-row-action {
-  min-height: 36px;
-  padding: 0 0.65rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  border-radius: var(--radius-sm);
-  background-color: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-}
-
-.btn-row-action:hover {
-  background-color: var(--surface-muted);
-  color: var(--text-primary);
-  border-color: var(--border-strong);
-}
-
-.btn-row-delete {
-  color: var(--destructive);
-  border-color: var(--destructive-border);
-}
-
-.btn-row-delete:hover {
-  background-color: var(--destructive-soft);
-  color: var(--destructive);
-  border-color: var(--destructive);
-}
-
-/* Icon-only Button (Close Dialog) */
-.btn-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.btn-icon:hover {
-  background-color: var(--surface-muted);
-  color: var(--text-primary);
-}
-
-/* ==========================================================================
-   Empty States (First-use vs No-results)
-   ========================================================================== */
+/* --- 4.9 Empty states --- */
 .state-card {
-  padding: var(--space-10) var(--space-6);
+  padding: var(--space-12) var(--space-6);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -758,208 +877,147 @@ select {
 }
 
 .state-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-full);
-  background-color: var(--accent-soft);
-  color: var(--accent-primary);
+  width: var(--space-16);
+  height: var(--space-16);
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-pill);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: var(--space-2);
+  /* first-use: gentle plum accent */
+  background-color: var(--accent-secondary-soft);
+  color: var(--accent-secondary-strong);
 }
 
+/* no-results: neutral, so the two states read differently */
 .state-icon-neutral {
   background-color: var(--surface-muted);
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .state-title {
-  font-size: 1.1875rem;
-  font-weight: 700;
+  font-size: var(--font-size-section-heading);
+  line-height: var(--line-height-section-heading);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.01em;
   color: var(--text-primary);
-  letter-spacing: -0.015em;
 }
 
 .state-copy {
-  font-size: 0.90625rem;
+  max-width: 26rem;
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
   color: var(--text-secondary);
-  max-width: 380px;
-  line-height: 1.45;
 }
 
-/* ==========================================================================
-   Dialogs (Native <dialog> with Accessible Backdrop & Mobile Responsiveness)
-   ========================================================================== */
+/* --- 4.10 Dialogs --- */
 dialog:not([open]) {
   display: none !important;
 }
 
-dialog[open] {
-  display: block;
-}
-
 .app-dialog {
-  border: none;
-  padding: 0;
-  background: transparent;
-  max-width: 500px;
-  width: 90vw;
+  width: calc(100% - var(--space-8));
+  max-width: 31.25rem; /* 500px */
   margin: auto;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-modal);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-dialog);
+  background: transparent;
+  color: var(--text-primary);
+  box-shadow: var(--shadow-overlay);
   overflow: visible;
 }
 
-/* Native Backdrop */
 .app-dialog::backdrop {
-  background-color: rgba(32, 40, 35, 0.48);
-  backdrop-filter: blur(2px);
+  background-color: var(--overlay-backdrop);
 }
 
-/* Fallback backdrop when ::backdrop isn't active */
 .dialog-content {
-  background-color: var(--surface-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
-  max-height: 90vh;
+  max-height: calc(100vh - var(--space-8));
+  max-height: calc(100dvh - var(--space-8));
   overflow: hidden;
-  animation: dialogScale 0.16s ease-out;
+  background-color: var(--surface-card);
+  border-radius: var(--radius-dialog);
+  animation: fadeIn var(--duration-slow) var(--ease-standard);
 }
 
-@keyframes dialogScale {
-  from {
-    transform: scale(0.96) translateY(6px);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1) translateY(0);
-    opacity: 1;
-  }
+#expense-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .dialog-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--border-subtle);
   gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
 
+.dialog-confirm .dialog-header {
+  justify-content: flex-start;
+  padding: var(--space-6) var(--space-6) var(--space-4);
+}
+
 .dialog-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: -0.015em;
+  font-size: var(--font-size-section-heading);
+  line-height: var(--line-height-section-heading);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
 
 .dialog-subtitle {
-  font-size: 0.84375rem;
+  font-size: var(--font-size-support);
+  line-height: var(--line-height-support);
   color: var(--text-secondary);
-  margin-top: 0.125rem;
 }
 
 .dialog-body {
-  padding: 1.5rem;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-6);
+  padding: var(--space-6);
+  overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+.dialog-confirm .dialog-body {
+  gap: var(--space-3);
+  padding-top: 0;
 }
 
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1rem 1.5rem;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
   border-top: 1px solid var(--border-subtle);
-  background-color: var(--bg-page);
   flex-shrink: 0;
 }
 
-/* Dialog Form Fields */
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.form-label {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.required {
-  color: var(--destructive);
-  font-weight: 700;
-}
-
-/* Amount Field Special Treatment */
-.form-group-amount .amount-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.currency-symbol {
-  position: absolute;
-  left: 1rem;
-  font-size: 1.125rem;
-  font-weight: 700;
-  color: var(--text-secondary);
-  pointer-events: none;
-}
-
-.form-group-amount input {
-  height: 52px;
-  font-size: 1.25rem;
-  font-weight: 700;
-  padding-left: 2.35rem;
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
-}
-
-/* Inline Field Errors */
-.field-error {
-  font-size: 0.8125rem;
-  color: var(--destructive);
-  min-height: 1rem;
-  line-height: 1.35;
-  font-weight: 500;
-}
-
-input.is-invalid,
-select.is-invalid {
-  border-color: var(--destructive) !important;
-  background-color: var(--destructive-soft);
-}
-
-input.is-invalid:focus,
-select.is-invalid:focus {
-  box-shadow: 0 0 0 3px var(--destructive-focus-ring) !important;
-}
-
-/* Delete Preview in Confirm Dialog */
 .dialog-confirm {
-  max-width: 440px;
+  max-width: 27.5rem; /* 440px */
+}
+
+.dialog-confirm .dialog-header {
+  border-bottom: none;
 }
 
 .dialog-danger-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: var(--radius-full);
-  background-color: var(--destructive-soft);
-  color: var(--destructive);
+  width: var(--space-12);
+  height: var(--space-12);
+  border-radius: var(--radius-pill);
+  background-color: var(--danger-soft);
+  color: var(--danger);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -967,153 +1025,243 @@ select.is-invalid:focus {
 }
 
 .delete-preview-card {
-  background-color: var(--bg-page);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 0.875rem 1rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: var(--space-3);
-  font-size: 0.90625rem;
-  font-weight: 600;
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
 }
 
 .delete-preview-details {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
   min-width: 0;
 }
 
 .delete-preview-title {
+  font-weight: var(--font-weight-medium);
   color: var(--text-primary);
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .delete-preview-sub {
-  font-size: 0.78125rem;
+  font-size: var(--font-size-support);
+  line-height: var(--line-height-support);
   color: var(--text-secondary);
-  font-weight: 500;
 }
 
 .delete-preview-amount {
-  font-size: 1.0625rem;
-  color: var(--destructive);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
   white-space: nowrap;
 }
 
 .delete-warning-text,
 .discard-message {
-  font-size: 0.84375rem;
+  font-size: var(--font-size-support);
+  line-height: var(--line-height-support);
   color: var(--text-secondary);
-  line-height: 1.45;
 }
 
-/* ==========================================================================
-   Toast Notification Region (Non-blocking, aria-live="polite")
-   ========================================================================== */
+/* --- 4.11 Toast notifications --- */
 .toast-region {
   position: fixed;
-  bottom: 1.5rem;
-  right: 1.5rem;
+  right: var(--space-6);
+  bottom: var(--space-6);
   z-index: 2000;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
+  width: calc(100% - var(--space-12));
+  max-width: 25rem;
   pointer-events: none;
-  max-width: 400px;
-  width: calc(100% - 3rem);
 }
 
 .toast {
   pointer-events: auto;
-  background-color: var(--text-primary);
-  color: var(--text-inverse);
-  padding: 0.875rem 1.125rem;
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-modal);
-  font-size: 0.875rem;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  animation: toastIn 0.2s ease-out;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  font-size: var(--font-size-support);
+  line-height: var(--line-height-support);
+  color: var(--text-primary);
+  background-color: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-overlay);
+  animation: fadeIn var(--duration-slow) var(--ease-standard);
+}
+
+.toast-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--text-primary);
+}
+
+.toast-error {
+  background-color: var(--danger-soft);
+  color: var(--danger);
+}
+
+.toast-error .toast-icon {
+  color: var(--danger);
 }
 
 .toast-message {
-  line-height: 1.4;
   flex: 1 1 auto;
+  font-weight: var(--font-weight-medium);
 }
 
 .toast-action-btn {
-  background: none;
-  border: none;
-  color: var(--accent-soft);
+  flex-shrink: 0;
   text-decoration: underline;
   text-underline-offset: 3px;
-  font-size: 0.84375rem;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  padding: 0.25rem 0.35rem;
 }
 
-.toast-action-btn:hover {
-  color: #FFFFFF;
-}
-
-@keyframes toastIn {
-  from {
-    transform: translateY(12px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-/* ==========================================================================
-   Footer & Trust Explanation
-   ========================================================================== */
-.app-footer {
-  text-align: center;
-  padding: var(--space-6) 0 var(--space-4);
-}
-
-.footer-trust {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.footer-primary-text {
-  font-size: 0.84375rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.footer-secondary-text {
-  font-size: 0.78125rem;
-  color: var(--text-muted);
-}
-
-/* ==========================================================================
-   Utilities
-   ========================================================================== */
+/* --- 4.12 Utilities --- */
 .hidden {
   display: none !important;
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes rowHighlight {
+  from { background-color: var(--accent-secondary-soft); }
+  to   { background-color: transparent; }
+}
+
+
 /* ==========================================================================
-   Responsive Adaptations & Mobile Breakpoints (360px, 390px, 768px, 1080px)
+   5. COMPONENT STATES
    ========================================================================== */
 
-/* Tablet & Smaller Desktop (below 840px) */
-@media (max-width: 840px) {
+/* --- Focus (shared, visible, separated from component) --- */
+.btn:focus-visible,
+.btn-icon:focus-visible,
+.btn-clear:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--focus-ring);
+}
+
+/* --- Primary --- */
+.btn-primary:hover { background-color: var(--action-primary-hover); }
+.btn-primary:active { background-color: var(--action-primary-pressed); }
+
+/* --- Secondary --- */
+.btn-secondary:hover { background-color: var(--surface-muted); border-color: var(--border-control); }
+.btn-secondary:active { background-color: var(--disabled-background); }
+
+/* --- Ghost & icon --- */
+.btn-ghost:hover,
+.btn-icon:hover,
+.btn-clear:hover {
+  background-color: var(--surface-muted);
+  color: var(--text-primary);
+}
+
+.btn-ghost:active,
+.btn-icon:active,
+.btn-clear:active {
+  background-color: var(--disabled-background);
+}
+
+/* --- Danger ghost (row delete) --- */
+.btn-danger-ghost:hover { background-color: var(--danger-soft); color: var(--danger-hover); }
+.btn-danger-ghost:active { background-color: var(--danger-soft); color: var(--danger-hover); }
+
+/* --- Destructive (final confirmation) --- */
+.btn-destructive:hover { background-color: var(--danger-hover); }
+.btn-destructive:active { background-color: var(--danger-hover); }
+.btn-destructive:focus-visible,
+.btn-danger-ghost:focus-visible { outline-color: var(--danger); }
+
+/* --- Disabled (buttons & controls) --- */
+.btn:disabled,
+.btn[aria-disabled="true"],
+input:disabled,
+select:disabled {
+  background-color: var(--disabled-background);
+  border-color: var(--disabled-background);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+/* --- Rows --- */
+.expense-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.expense-item.item-highlight {
+  animation: rowHighlight 1.5s var(--ease-standard);
+}
+
+/* --- Invalid controls --- */
+input.is-invalid,
+select.is-invalid {
+  border-color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger); /* 2px total, no layout shift */
+  background-color: var(--danger-soft);
+}
+
+input.is-invalid:focus-visible,
+select.is-invalid:focus-visible {
+  outline-color: var(--danger);
+}
+
+/* --- Selected / active filters (plum, never green) --- */
+.filter-field.is-active .field-label::after {
+  content: "";
+  width: var(--space-2);
+  height: var(--space-2);
+  margin-left: var(--space-1);
+  border-radius: var(--radius-pill);
+  background-color: var(--accent-secondary);
+}
+
+.filter-field.is-active select,
+.filter-field.is-active input {
+  background-color: var(--accent-secondary-soft);
+  border-color: var(--accent-secondary-strong);
+  box-shadow: inset 0 0 0 1px var(--accent-secondary-strong);
+  color: var(--accent-secondary-strong);
+  font-weight: var(--font-weight-medium);
+}
+
+.filter-field.is-active select:hover {
+  background-color: var(--accent-secondary-soft-hover);
+}
+
+.filter-field.is-active .field-icon {
+  color: var(--accent-secondary-strong);
+}
+
+
+/* ==========================================================================
+   6. RESPONSIVE RULES (checked at 360, 390, 768, 1440)
+   ========================================================================== */
+
+/* Tablet & small desktop */
+@media (max-width: 52.5em) { /* 840px */
   body {
     padding: var(--space-6) var(--space-4) var(--space-8);
+  }
+
+  .app-shell {
+    gap: var(--space-6);
   }
 
   .summary-section {
@@ -1136,113 +1284,103 @@ select.is-invalid:focus {
     display: none;
   }
 
-  /* Mobile Stacked Expense Row */
+  /* Stacked expense row: wraps gracefully at large text sizes / zoom */
   .expense-item {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-areas:
-      "desc amount"
-      "meta actions";
-    row-gap: 0.625rem;
-    column-gap: 0.75rem;
-    padding: 1rem 1.125rem;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-3) var(--space-4);
   }
 
   .col-desc {
-    grid-area: desc;
-    font-size: 1rem;
-    font-weight: 600;
+    order: 1;
+    flex: 1 1 10rem;
+    min-width: 0;
   }
 
   .col-amount {
-    grid-area: amount;
-    font-size: 1.1875rem;
-    font-weight: 700;
-    text-align: right;
+    order: 2;
+    flex: 0 0 auto;
+    margin-left: auto;
   }
 
   .col-meta-wrapper {
-    grid-area: meta;
+    order: 3;
     display: flex;
+    flex: 1 1 auto;
     align-items: center;
-    gap: 0.5rem;
     flex-wrap: wrap;
-  }
-
-  .col-date {
-    font-size: 0.8125rem;
-    color: var(--text-secondary);
+    gap: var(--space-2);
+    min-width: 0;
   }
 
   .col-actions {
-    grid-area: actions;
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.35rem;
-  }
-
-  .btn-row-action {
-    min-height: 42px; /* Touch-friendly tap target on mobile */
-    padding: 0 0.875rem;
-    font-size: 0.84375rem;
+    order: 4;
+    flex: 0 0 auto;
+    margin-left: auto;
+    min-width: 0;
   }
 }
 
-/* Small Phones (below 540px) */
-@media (max-width: 540px) {
+/* Phones */
+@media (max-width: 33.75em) { /* 540px */
   body {
-    padding: 1rem 0.875rem 2.5rem;
+    padding: var(--space-4) var(--space-4) var(--space-12);
   }
 
   .app-shell {
-    gap: var(--space-4);
+    gap: var(--space-6);
   }
 
   .app-header {
     flex-wrap: wrap;
   }
 
-  .header-right {
-    width: 100%;
-  }
-
+  .header-right,
   .header-right .btn {
     width: 100%;
   }
 
   .summary-section {
     grid-template-columns: 1fr;
-    gap: 0.75rem;
+    gap: var(--space-3);
   }
 
-  .summary-card {
-    padding: 1rem 1.125rem;
-    min-height: auto;
+  .summary-card,
+  .toolbar-card {
+    padding: var(--space-4);
   }
 
   .summary-card-featured .summary-value {
-    font-size: 2rem;
+    font-size: var(--font-size-metric-sm);
+    line-height: var(--line-height-metric-sm);
   }
 
   .summary-value {
-    font-size: 1.625rem;
+    font-size: var(--font-size-section-heading);
+    line-height: var(--line-height-section-heading);
   }
 
-  .toolbar-grid {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
-  }
-
+  .toolbar-grid,
   .custom-date-grid {
     grid-template-columns: 1fr;
-    gap: 0.75rem;
+    gap: var(--space-4);
   }
 
-  /* Full screen or near full screen dialog on mobile */
+  .custom-date-actions {
+    min-height: 0;
+    margin-top: 0;
+  }
+
+  .state-card {
+    padding: var(--space-8) var(--space-4);
+  }
+
+  /* Full-screen dialog sheet on phones */
   .app-dialog {
-    width: 100vw;
-    max-width: 100vw;
+    width: 100%;
+    max-width: 100%;
     height: 100%;
     max-height: 100%;
     margin: 0;
@@ -1250,14 +1388,38 @@ select.is-invalid:focus {
   }
 
   .dialog-content {
-    border-radius: 0;
-    border: none;
     height: 100%;
-    max-height: 100vh;
+    max-height: 100%;
+    border-radius: 0;
+  }
+
+  .dialog-confirm {
+    height: auto;
+    margin: auto auto 0;
+    border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
+  }
+
+  .dialog-confirm .dialog-content {
+    height: auto;
+    border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
+  }
+
+  .dialog-body {
+    padding: var(--space-4);
+  }
+
+  .dialog-header {
+    padding-left: var(--space-4);
+  }
+
+  .dialog-confirm .dialog-header {
+    padding: var(--space-6) var(--space-4) var(--space-4);
   }
 
   .dialog-footer {
     flex-direction: column-reverse;
+    align-items: stretch;
+    padding: var(--space-4);
   }
 
   .dialog-footer .btn {
@@ -1265,14 +1427,21 @@ select.is-invalid:focus {
   }
 
   .toast-region {
-    right: 0.75rem;
-    bottom: 0.75rem;
-    width: calc(100% - 1.5rem);
+    right: var(--space-3);
+    bottom: var(--space-3);
+    width: calc(100% - var(--space-6));
   }
 }
 
-/* Reduced Motion Preference */
+
+/* ==========================================================================
+   7. REDUCED MOTION
+   ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
