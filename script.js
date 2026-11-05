@@ -39,8 +39,11 @@
   let lastFocusedTrigger = null;
   let initialFormValues = null;
   let isSubmitting = false;
-  let menuTrigger = null;
-  let menuExpenseId = null;
+  let formMode = 'add';           // 'add' | 'edit' | 'duplicate'
+  let sortState = { key: null, dir: null }; // null key = default (newest date first)
+  let lastDeleted = null;         // { expense, index } — only the most recent delete can be undone
+  let undoToast = null;
+  let activeMenu = null;          // { el, items, trigger, onSelect }
 
   // --- DOM -----------------------------------------------------------------
 
@@ -48,6 +51,7 @@
 
   const monthAmountEl = $('month-amount');
   const monthPeriodLabelEl = $('month-period-label');
+  const monthExplainPeriodEl = $('month-explain-period');
   const alltimeAmountEl = $('alltime-amount');
   const totalCountEl = $('total-count');
 
@@ -65,16 +69,19 @@
   const customDateEndInput = $('custom-date-end');
   const customDateErrorEl = $('custom-date-error');
 
+  const tableEl = $('expense-table');
   const tableHeadEl = $('desktop-list-header');
   const expenseListEl = $('expense-list');
+  const exportBtn = $('export-btn');
+  const exportMenuEl = $('export-menu');
+  const exportCountEl = $('export-count');
   const emptyStateEl = $('empty-state');
   const noResultsStateEl = $('no-results-state');
   const emptyStateAddBtn = $('empty-state-add-btn');
   const noResultsClearBtn = $('no-results-clear-btn');
   const openAddDialogBtn = $('open-add-dialog-btn');
 
-  const menuEl = $('row-actions-menu');
-  const menuItems = Array.from(menuEl.querySelectorAll('[role="menuitem"]'));
+  const rowMenuEl = $('row-actions-menu');
 
   const expenseDialog = $('expense-dialog');
   const dialogTitleEl = $('dialog-title');
@@ -82,6 +89,7 @@
   const dialogCancelBtn = $('dialog-cancel-btn');
   const dialogSubmitBtn = $('dialog-submit-btn');
   const submitBtnText = $('submit-btn-text');
+  const dialogNoticeEl = $('dialog-notice');
   const expenseForm = $('expense-form');
 
   const amountInput = $('expense-amount');
@@ -113,10 +121,20 @@
 
   const pad2 = (n) => String(n).padStart(2, '0');
 
-  /** Local calendar date as 'YYYY-MM-DD' (no UTC shift). */
+  /** A Date's local calendar day as 'YYYY-MM-DD' (no UTC shift). */
+  const toDateString = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
   function getTodayDateString() {
+    return toDateString(new Date());
+  }
+
+  /** Monday–Sunday of the current local week, as date strings. */
+  function getThisWeekRange() {
     const now = new Date();
-    return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+    const offset = (now.getDay() + 6) % 7; // days since Monday
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset);
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+    return [toDateString(start), toDateString(end)];
   }
 
   function getCurrentMonthPrefix() {
@@ -247,10 +265,11 @@
   // --- Toasts --------------------------------------------------------------
 
   /**
-   * Show a status message. Success/info messages auto-dismiss;
-   * errors stay until dismissed.
+   * Show a status message. Success/info messages auto-dismiss (3s by
+   * default, paused while hovered or focused); errors stay until dismissed.
+   * Returns { dismiss } so callers can retire a toast early.
    */
-  function showToast(message, { type = 'success', actionLabel = null, onAction = null, duration = 4000 } = {}) {
+  function showToast(message, { type = 'success', actionLabel = null, onAction = null, duration = 3000, onClose = null } = {}) {
     const isError = type === 'error';
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
@@ -262,20 +281,24 @@
     toast.appendChild(msg);
 
     let timer = null;
+    let closed = false;
     const remove = () => {
+      if (closed) return;
+      closed = true;
       clearTimeout(timer);
-      if (!toast.parentNode) return;
-      toast.style.transition = 'opacity 0.16s ease';
-      toast.style.opacity = '0';
-      setTimeout(() => toast.remove(), 170);
+      if (typeof onClose === 'function') onClose();
+      toast.classList.add('is-leaving');
+      setTimeout(() => toast.remove(), 180);
     };
+    const startTimer = () => { if (!isError && !closed) timer = setTimeout(remove, duration); };
+    const stopTimer = () => clearTimeout(timer);
 
     if (actionLabel && typeof onAction === 'function') {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn btn-secondary';
       btn.textContent = actionLabel;
-      btn.addEventListener('click', () => { onAction(); remove(); });
+      btn.addEventListener('click', () => { remove(); onAction(); });
       toast.appendChild(btn);
     }
 
@@ -288,10 +311,16 @@
       close.addEventListener('click', remove);
       toast.appendChild(close);
     } else {
-      timer = setTimeout(remove, duration);
+      // Give people time to reach an action: hold while hovered or focused
+      toast.addEventListener('pointerenter', stopTimer);
+      toast.addEventListener('pointerleave', startTimer);
+      toast.addEventListener('focusin', stopTimer);
+      toast.addEventListener('focusout', (e) => { if (!toast.contains(e.relatedTarget)) startTimer(); });
+      startTimer();
     }
 
     (isError ? alertRegion : toastRegion).appendChild(toast);
+    return { dismiss: remove };
   }
 
   // --- Summary (global; ignores list filters) ------------------------------
@@ -302,6 +331,8 @@
   function setMetric(el, text) {
     if (el.textContent === text) return;
     el.textContent = text;
+    // Keep the detail (back) face showing the same figure
+    document.querySelectorAll(`[data-mirror="${el.id}"]`).forEach((m) => { m.textContent = text; });
     if (!metricsReady || prefersReducedMotion.matches) return;
     el.classList.remove('metric-changed');
     void el.offsetWidth; // restart the animation if it's already running
@@ -314,6 +345,7 @@
 
     setMetric(monthAmountEl, formatINR(sumExpenses(monthExpenses)));
     monthPeriodLabelEl.textContent = formatMonthYearLabel(currentMonth);
+    monthExplainPeriodEl.textContent = formatMonthYearLabel(currentMonth);
     setMetric(alltimeAmountEl, formatINR(sumExpenses(expenses)));
     setMetric(totalCountEl, expenses.length.toLocaleString('en-IN'));
   }
@@ -338,6 +370,11 @@
     if (query && !item.description.toLowerCase().includes(query)) return false;
     if (category !== 'ALL' && item.category !== category) return false;
 
+    if (dateMode === 'TODAY' && item.date !== getTodayDateString()) return false;
+    if (dateMode === 'THIS_WEEK') {
+      const [start, end] = getThisWeekRange();
+      if (item.date < start || item.date > end) return false;
+    }
     if (dateMode === 'THIS_MONTH' && !item.date.startsWith(getCurrentMonthPrefix())) return false;
     if (dateMode === 'LAST_MONTH' && !item.date.startsWith(getLastMonthPrefix())) return false;
     if (dateMode === 'CUSTOM') {
@@ -349,14 +386,37 @@
     return true;
   }
 
+  /** Default order: newest date first, then most recently added; stable via id. */
+  const compareDefault = (a, b) =>
+    b.date.localeCompare(a.date) ||
+    (b.createdAt || 0) - (a.createdAt || 0) ||
+    String(a.id).localeCompare(String(b.id));
+
+  const textCollator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
+  const SORTERS = {
+    description: (a, b) => textCollator.compare(a.description, b.description),
+    category: (a, b) => textCollator.compare(a.category, b.category),
+    date: (a, b) => a.date.localeCompare(b.date) || (a.createdAt || 0) - (b.createdAt || 0),
+    amount: (a, b) => toPaise(a.amount) - toPaise(b.amount)
+  };
+
   function getFilteredAndSortedExpenses() {
-    return expenses
-      .filter(matchesFilters)
-      .sort((a, b) =>
-        b.date.localeCompare(a.date) ||
-        (b.createdAt || 0) - (a.createdAt || 0) ||
-        String(a.id).localeCompare(String(b.id))
-      );
+    const { key, dir } = sortState;
+    const compare = key
+      ? (a, b) => (dir === 'asc' ? 1 : -1) * SORTERS[key](a, b) || compareDefault(a, b)
+      : compareDefault;
+    return expenses.filter(matchesFilters).sort(compare);
+  }
+
+  /** Reflect the active sort on the column headers (aria-sort + indicator). */
+  function updateSortHeaders() {
+    tableHeadEl.querySelectorAll('th[data-sort-key]').forEach((th) => {
+      const key = th.dataset.sortKey;
+      let sort = 'none';
+      if (sortState.key === key) sort = sortState.dir === 'asc' ? 'ascending' : 'descending';
+      else if (!sortState.key && key === 'date') sort = 'descending'; // the default order
+      th.setAttribute('aria-sort', sort);
+    });
   }
 
   // --- Rendering -----------------------------------------------------------
@@ -365,23 +425,22 @@
     const desc = escapeHtml(expense.description);
     const id = escapeHtml(expense.id);
     return `
-      <li class="expense-item" data-id="${id}">
-        <div class="cell-desc">${desc}</div>
-        <div class="cell-meta">
-          <div class="cell-category">${categoryBadge(expense.category)}</div>
-          <div class="cell-date"><time datetime="${escapeHtml(expense.date)}">${escapeHtml(formatDateDisplay(expense.date))}</time></div>
-        </div>
-        <div class="cell-amount">${formatINR(expense.amount)}</div>
-        <div class="cell-actions">
+      <tr class="expense-item" role="row" data-id="${id}">
+        <td class="cell-desc" role="cell">${desc}</td>
+        <td class="cell-category" role="cell">${categoryBadge(expense.category)}</td>
+        <td class="cell-date" role="cell"><time datetime="${escapeHtml(expense.date)}">${escapeHtml(formatDateDisplay(expense.date))}</time></td>
+        <td class="cell-amount" role="cell">${formatINR(expense.amount)}</td>
+        <td class="cell-actions" role="cell">
           <button type="button" class="menu-trigger" data-id="${id}"
             aria-haspopup="menu" aria-expanded="false" aria-controls="row-actions-menu"
             aria-label="Actions for ${desc}">${DOTS_ICON}</button>
-        </div>
-      </li>`;
+        </td>
+      </tr>`;
   }
 
   function renderList() {
-    closeMenu(false);
+    // A re-render replaces row triggers; close an open row menu with them
+    if (activeMenu && activeMenu.el === rowMenuEl) closeMenu(false);
 
     const hasAnyExpenses = expenses.length > 0;
     const filtered = getFilteredAndSortedExpenses();
@@ -394,9 +453,12 @@
     filterCategorySelect.closest('.field').classList.toggle('is-active', filterCategorySelect.value !== 'ALL');
     filterDateSelect.closest('.field').classList.toggle('is-active', filterDateSelect.value !== 'ALL');
 
-    // First use: no toolbar or results line, just the welcome state
+    // First use: no toolbar, results line or export, just the welcome state
     toolbarEl.classList.toggle('hidden', !hasAnyExpenses);
     resultsMetaEl.classList.toggle('hidden', !hasAnyExpenses);
+    exportBtn.classList.toggle('hidden', !hasAnyExpenses);
+    exportBtn.disabled = filtered.length === 0;
+    updateSortHeaders();
 
     const n = filtered.length;
     resultsCountEl.textContent = `${n.toLocaleString('en-IN')} ${n === 1 ? 'expense' : 'expenses'}`;
@@ -404,8 +466,7 @@
 
     emptyStateEl.classList.toggle('hidden', hasAnyExpenses);
     noResultsStateEl.classList.toggle('hidden', !hasAnyExpenses || n > 0);
-    tableHeadEl.classList.toggle('hidden', n === 0);
-    expenseListEl.classList.toggle('hidden', n === 0);
+    tableEl.classList.toggle('hidden', n === 0);
     expenseListEl.innerHTML = filtered.map(renderRow).join('');
   }
 
@@ -447,11 +508,12 @@
     renderList();
   }
 
-  // --- Actions menu --------------------------------------------------------
+  // --- Menus (row actions & export share one implementation) ---------------
 
   function positionMenu() {
-    if (!menuTrigger) return;
-    const rect = menuTrigger.getBoundingClientRect();
+    if (!activeMenu) return;
+    const { el, trigger } = activeMenu;
+    const rect = trigger.getBoundingClientRect();
     const vw = document.documentElement.clientWidth;
     const vh = window.innerHeight;
 
@@ -463,8 +525,8 @@
 
     const gap = 4;
     const margin = 8;
-    const mw = menuEl.offsetWidth;
-    const mh = menuEl.offsetHeight;
+    const mw = el.offsetWidth;
+    const mh = el.offsetHeight;
 
     let top = rect.bottom + gap;
     if (top + mh > vh - margin && rect.top - gap - mh >= margin) {
@@ -475,100 +537,90 @@
     let left = rect.right - mw;
     left = Math.max(margin, Math.min(left, vw - mw - margin));
 
-    menuEl.style.top = `${Math.round(top)}px`;
-    menuEl.style.left = `${Math.round(left)}px`;
-    menuEl.dataset.placement = top < rect.top ? 'top' : 'bottom';
+    el.style.top = `${Math.round(top)}px`;
+    el.style.left = `${Math.round(left)}px`;
+    el.dataset.placement = top < rect.top ? 'top' : 'bottom';
   }
 
-  function openMenu(trigger, focusIndex = 0) {
-    if (menuTrigger && menuTrigger !== trigger) closeMenu(false);
-    menuTrigger = trigger;
-    menuExpenseId = trigger.dataset.id;
+  function openMenu(el, trigger, onSelect, focusIndex = 0) {
+    if (activeMenu) closeMenu(false);
+    const items = Array.from(el.querySelectorAll('[role="menuitem"]'));
+    activeMenu = { el, items, trigger, onSelect };
     trigger.setAttribute('aria-expanded', 'true');
-    menuEl.setAttribute('aria-label', trigger.getAttribute('aria-label'));
-    menuEl.hidden = false;
+    if (el === rowMenuEl) el.setAttribute('aria-label', trigger.getAttribute('aria-label'));
+    el.hidden = false;
     positionMenu();
-    if (!menuTrigger) return; // closed during positioning
-    const index = focusIndex < 0 ? menuItems.length - 1 : focusIndex;
-    menuItems[index].focus();
+    if (!activeMenu) return; // closed during positioning
+    items[focusIndex < 0 ? items.length - 1 : focusIndex].focus();
   }
 
   function closeMenu(returnFocus) {
-    if (!menuTrigger) return;
-    const trigger = menuTrigger;
+    if (!activeMenu) return;
+    const { el, trigger } = activeMenu;
+    activeMenu = null;
     trigger.setAttribute('aria-expanded', 'false');
-    menuEl.hidden = true;
-    menuTrigger = null;
-    menuExpenseId = null;
+    el.hidden = true;
     if (returnFocus && document.contains(trigger)) trigger.focus();
+  }
+
+  /** Wire a menu button: click toggles; ArrowDown/ArrowUp open at first/last item. */
+  function handleTriggerClick(el, trigger, onSelect) {
+    if (activeMenu && activeMenu.trigger === trigger) closeMenu(true);
+    else openMenu(el, trigger, onSelect, 0);
+  }
+
+  function handleTriggerKeydown(e, el, trigger, onSelect) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); openMenu(el, trigger, onSelect, 0); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); openMenu(el, trigger, onSelect, -1); }
+    // Enter / Space trigger a native click
+  }
+
+  [rowMenuEl, exportMenuEl].forEach((el) => {
+    el.addEventListener('keydown', (e) => {
+      if (!activeMenu || activeMenu.el !== el) return;
+      const { items } = activeMenu;
+      const index = items.indexOf(document.activeElement);
+      const last = items.length - 1;
+      switch (e.key) {
+        case 'ArrowDown': e.preventDefault(); items[index >= last ? 0 : index + 1].focus(); break;
+        case 'ArrowUp':   e.preventDefault(); items[index <= 0 ? last : index - 1].focus(); break;
+        case 'Home':      e.preventDefault(); items[0].focus(); break;
+        case 'End':       e.preventDefault(); items[last].focus(); break;
+        case 'Escape':    e.preventDefault(); closeMenu(true); break;
+        case 'Tab':       closeMenu(true); break; // Tab then continues from the trigger
+        default: break;
+      }
+    });
+
+    el.addEventListener('click', (e) => {
+      const item = e.target.closest('[data-menu-action]');
+      if (!item || !activeMenu) return;
+      const { trigger, onSelect } = activeMenu;
+      closeMenu(false);
+      onSelect(item.dataset.menuAction, trigger);
+    });
+  });
+
+  function onRowAction(action, trigger) {
+    const id = trigger.dataset.id;
+    if (action === 'edit') openEditDialog(id, trigger);
+    else if (action === 'duplicate') openDuplicateDialog(id, trigger);
+    else if (action === 'delete') openDeleteConfirmation(id, trigger);
   }
 
   expenseListEl.addEventListener('click', (e) => {
     const trigger = e.target.closest('.menu-trigger');
-    if (!trigger) return;
-    if (menuTrigger === trigger) closeMenu(true);
-    else openMenu(trigger, 0);
+    if (trigger) handleTriggerClick(rowMenuEl, trigger, onRowAction);
   });
 
   expenseListEl.addEventListener('keydown', (e) => {
     const trigger = e.target.closest('.menu-trigger');
-    if (!trigger) return;
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      openMenu(trigger, 0);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      openMenu(trigger, -1);
-    }
-    // Enter / Space trigger a native click
-  });
-
-  menuEl.addEventListener('keydown', (e) => {
-    const index = menuItems.indexOf(document.activeElement);
-    const last = menuItems.length - 1;
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        menuItems[index >= last ? 0 : index + 1].focus();
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        menuItems[index <= 0 ? last : index - 1].focus();
-        break;
-      case 'Home':
-        e.preventDefault();
-        menuItems[0].focus();
-        break;
-      case 'End':
-        e.preventDefault();
-        menuItems[last].focus();
-        break;
-      case 'Escape':
-        e.preventDefault();
-        closeMenu(true);
-        break;
-      case 'Tab':
-        // Return focus to the trigger, then let Tab continue from there
-        closeMenu(true);
-        break;
-      default:
-        break;
-    }
-  });
-
-  menuEl.addEventListener('click', (e) => {
-    const item = e.target.closest('[data-menu-action]');
-    if (!item || !menuTrigger) return;
-    const id = menuExpenseId;
-    const trigger = menuTrigger;
-    closeMenu(false);
-    if (item.dataset.menuAction === 'edit') openEditDialog(id, trigger);
-    else openDeleteConfirmation(id, trigger);
+    if (trigger) handleTriggerKeydown(e, rowMenuEl, trigger, onRowAction);
   });
 
   document.addEventListener('pointerdown', (e) => {
-    if (!menuTrigger) return;
-    if (menuEl.contains(e.target) || menuTrigger.contains(e.target)) return;
+    if (!activeMenu) return;
+    if (activeMenu.el.contains(e.target) || activeMenu.trigger.contains(e.target)) return;
     closeMenu(false);
   }, true);
 
@@ -626,30 +678,42 @@
     amountInput.focus();
   }
 
-  function openAddDialog(triggerEl) {
-    editingExpenseId = null;
+  const FORM_TITLES = { add: 'Add expense', edit: 'Edit expense', duplicate: 'Duplicate expense' };
+
+  /** Open the shared form. `source` prefills it for edit and duplicate. */
+  function openExpenseForm(mode, source, triggerEl) {
+    formMode = mode;
+    editingExpenseId = mode === 'edit' ? source.id : null;
     clearFormErrors();
-    expenseForm.reset();
-    dateInput.value = getTodayDateString();
-    categorySelect.value = '';
-    dialogTitleEl.textContent = 'Add expense';
-    submitBtnText.textContent = 'Save expense';
-    openFormDialog(triggerEl || openAddDialogBtn);
+    if (source) {
+      amountInput.value = Number(source.amount).toFixed(2);
+      descInput.value = source.description;
+      // An unrecognised saved category leaves the select empty so the user picks one
+      categorySelect.value = VALID_CATEGORIES.includes(source.category) ? source.category : '';
+      dateInput.value = source.date;
+    } else {
+      expenseForm.reset();
+      dateInput.value = getTodayDateString();
+      categorySelect.value = '';
+    }
+    dialogTitleEl.textContent = FORM_TITLES[mode];
+    submitBtnText.textContent = mode === 'edit' ? 'Save changes' : 'Save expense';
+    dialogNoticeEl.classList.toggle('hidden', mode !== 'duplicate');
+    openFormDialog(triggerEl);
+  }
+
+  function openAddDialog(triggerEl) {
+    openExpenseForm('add', null, triggerEl || openAddDialogBtn);
   }
 
   function openEditDialog(id, triggerEl) {
     const expense = expenses.find((item) => item.id === id);
-    if (!expense) return;
-    editingExpenseId = id;
-    clearFormErrors();
-    amountInput.value = Number(expense.amount).toFixed(2);
-    descInput.value = expense.description;
-    // An unrecognised saved category leaves the select empty so the user picks one
-    categorySelect.value = VALID_CATEGORIES.includes(expense.category) ? expense.category : '';
-    dateInput.value = expense.date;
-    dialogTitleEl.textContent = 'Edit expense';
-    submitBtnText.textContent = 'Save changes';
-    openFormDialog(triggerEl);
+    if (expense) openExpenseForm('edit', expense, triggerEl);
+  }
+
+  function openDuplicateDialog(id, triggerEl) {
+    const expense = expenses.find((item) => item.id === id);
+    if (expense) openExpenseForm('duplicate', expense, triggerEl);
   }
 
   /** Close the form. Asks first if there are unsaved changes (unless forced). */
@@ -736,7 +800,7 @@
       date: dateInput.value
     };
 
-    const isEdit = Boolean(editingExpenseId);
+    const isEdit = formMode === 'edit';
     let saved;
     let next;
 
@@ -769,18 +833,20 @@
     closeExpenseDialog(true, false);
     refreshAll();
 
+    const doneMessage = { add: 'Expense added', edit: 'Expense updated', duplicate: 'Expense duplicated' }[formMode];
+
     if (!matchesFilters(saved)) {
-      showToast('Expense saved. It’s hidden by your current filters.', {
+      showToast(`${doneMessage}. It’s hidden by your current filters.`, {
         type: 'info',
         actionLabel: 'Clear filters',
         onAction: () => { resetAllFilters(); highlightRow(saved.id); },
-        duration: 7000
+        duration: 6000
       });
       if (isVisible(returnTo)) returnTo.focus(); else focusFallback();
       return;
     }
 
-    showToast(isEdit ? 'Changes saved.' : 'Expense added.');
+    showToast(doneMessage);
     if (isEdit && findRowTrigger(saved.id)) findRowTrigger(saved.id).focus();
     else if (isVisible(returnTo)) returnTo.focus();
     else openAddDialogBtn.focus();
@@ -824,6 +890,9 @@
     const pos = visibleIds.indexOf(id);
     const neighbourId = visibleIds[pos + 1] || visibleIds[pos - 1] || null;
 
+    const index = expenses.findIndex((item) => item.id === id);
+    const removed = expenses[index];
+
     if (!persist(expenses.filter((item) => item.id !== id))) {
       closeDeleteConfirmation(true);
       return;
@@ -831,12 +900,103 @@
 
     closeDeleteConfirmation(false);
     refreshAll();
-    showToast('Expense deleted.');
+
+    // Only the most recent deletion can be undone
+    if (undoToast) undoToast.dismiss();
+    const entry = { expense: removed, index };
+    lastDeleted = entry;
+    undoToast = showToast('Expense deleted', {
+      actionLabel: 'Undo',
+      onAction: undoDelete,
+      duration: 5000,
+      onClose: () => {
+        if (lastDeleted === entry) setTimeout(() => { if (lastDeleted === entry) lastDeleted = null; }, 0);
+        undoToast = null;
+      }
+    });
 
     const neighbour = neighbourId && findRowTrigger(neighbourId);
     if (neighbour) neighbour.focus();
     else focusFallback();
   }
+
+  /** Restore the most recently deleted expense exactly (same id and values). */
+  function undoDelete() {
+    const entry = lastDeleted;
+    lastDeleted = null;
+    if (!entry || expenses.some((item) => item.id === entry.expense.id)) return; // never duplicate
+    const next = [...expenses];
+    next.splice(Math.min(entry.index, next.length), 0, entry.expense);
+    if (!persist(next)) return;
+    refreshAll();
+    showToast('Expense restored');
+    const trigger = findRowTrigger(entry.expense.id);
+    if (trigger) { trigger.focus(); highlightRow(entry.expense.id); }
+    else focusFallback();
+  }
+
+  // --- Export --------------------------------------------------------------
+
+  /** One CSV field: quote when needed, double inner quotes, neutralise formulas. */
+  function csvCell(value) {
+    let text = String(value ?? '');
+    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`; // spreadsheet formula injection guard
+    if (/[",\r\n]/.test(text) || /^\s|\s$/.test(text)) text = `"${text.replace(/"/g, '""')}"`;
+    return text;
+  }
+
+  function exportCsv() {
+    const rows = getFilteredAndSortedExpenses();
+    if (!rows.length) {
+      showToast('There are no expenses in these results to export.', { type: 'info' });
+      return;
+    }
+    const lines = [
+      ['Description', 'Category', 'Date', 'Amount'],
+      ...rows.map((e) => [e.description, e.category, e.date, (toPaise(e.amount) / 100).toFixed(2)])
+    ].map((cells) => cells.map(csvCell).join(','));
+    // UTF-8 with BOM so spreadsheet apps read ₹ and non-Latin text correctly
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `pocketlog-expenses-${getTodayDateString()}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast(`Exported ${rows.length} ${rows.length === 1 ? 'expense' : 'expenses'} to CSV`);
+  }
+
+  exportBtn.addEventListener('click', () => {
+    const n = getFilteredAndSortedExpenses().length;
+    exportCountEl.textContent = `${n} ${n === 1 ? 'expense' : 'expenses'}`;
+    handleTriggerClick(exportMenuEl, exportBtn, (action) => {
+      if (action === 'export-csv') exportCsv();
+      exportBtn.focus();
+    });
+  });
+  exportBtn.addEventListener('keydown', (e) => {
+    const n = getFilteredAndSortedExpenses().length;
+    exportCountEl.textContent = `${n} ${n === 1 ? 'expense' : 'expenses'}`;
+    handleTriggerKeydown(e, exportMenuEl, exportBtn, (action) => {
+      if (action === 'export-csv') exportCsv();
+      exportBtn.focus();
+    });
+  });
+
+  // --- Sorting -------------------------------------------------------------
+
+  // asc → desc → back to the default order
+  tableHeadEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.sort-btn');
+    if (!btn) return;
+    const key = btn.closest('th').dataset.sortKey;
+    if (sortState.key !== key) sortState = { key, dir: 'asc' };
+    else if (sortState.dir === 'asc') sortState = { key, dir: 'desc' };
+    else sortState = { key: null, dir: null };
+    renderList();
+  });
 
   // --- Events --------------------------------------------------------------
 
@@ -870,6 +1030,25 @@
   deleteConfirmBtn.addEventListener('click', handleConfirmDelete);
 
   searchInput.addEventListener('input', renderList);
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && searchInput.value) {
+      e.preventDefault();
+      e.stopPropagation();
+      searchInput.value = '';
+      renderList();
+    }
+  });
+
+  // "/" focuses Search — but never while typing in a field or inside a dialog
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+    if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), dialog')) return;
+    if (document.querySelector('dialog[open]') || !isVisible(searchInput)) return;
+    e.preventDefault();
+    closeMenu(false);
+    searchInput.focus();
+    searchInput.select();
+  });
   clearSearchBtn.addEventListener('click', () => {
     searchInput.value = '';
     renderList();
@@ -898,14 +1077,13 @@
     });
   });
 
-  clearFiltersBtn.addEventListener('click', () => {
+  function clearFiltersFromUser() {
     resetAllFilters();
-    searchInput.focus(); // the button itself is now hidden
-  });
-  noResultsClearBtn.addEventListener('click', () => {
-    resetAllFilters();
-    searchInput.focus();
-  });
+    searchInput.focus(); // the clicked button is now hidden
+    showToast('Filters cleared');
+  }
+  clearFiltersBtn.addEventListener('click', clearFiltersFromUser);
+  noResultsClearBtn.addEventListener('click', clearFiltersFromUser);
 
   // Backdrop clicks and Escape for each dialog
   const dialogCloseHandlers = new Map([
@@ -926,6 +1104,80 @@
       handler();
     });
   });
+
+  // --- Summary cards: flip & decorative motion -------------------------------
+
+  const summaryGridEl = $('summary-grid');
+  const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
+
+  /**
+   * One state per card so hover and the Details button never disagree:
+   * the back shows when pinned (button) or hovered — unless the user
+   * pressed "Back" while hovering, which suppresses hover until they leave.
+   */
+  function initSummaryCard(card) {
+    const front = card.querySelector('.summary-card__face--front');
+    const back = card.querySelector('.summary-card__face--back');
+    const toggle = card.querySelector('.summary-card__toggle');
+    const toggleText = toggle.querySelector('.summary-card__toggle-text');
+    const state = { pinned: false, hover: false, hoverSuppressed: false };
+
+    const showingBack = () => state.pinned || (state.hover && !state.hoverSuppressed);
+
+    function render() {
+      const flipped = showingBack();
+      card.classList.toggle('is-flipped', flipped);
+      toggle.setAttribute('aria-expanded', String(flipped));
+      toggleText.textContent = flipped ? 'Back' : 'Details';
+      // Only the visible face is exposed to assistive tech
+      front.toggleAttribute('inert', flipped);
+      back.toggleAttribute('inert', !flipped);
+      front.setAttribute('aria-hidden', String(flipped));
+      back.setAttribute('aria-hidden', String(!flipped));
+    }
+
+    function showFront() {
+      state.pinned = false;
+      state.hoverSuppressed = state.hover;
+      render();
+    }
+
+    toggle.addEventListener('click', () => {
+      if (showingBack()) showFront();
+      else { state.pinned = true; render(); }
+    });
+
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && showingBack()) {
+        e.preventDefault();
+        showFront();
+        toggle.focus();
+      }
+    });
+
+    // Hover flip only for a precise pointer; the card itself doesn't move,
+    // so the hover region is stable during the rotation.
+    card.addEventListener('pointerenter', (e) => {
+      if (e.pointerType !== 'mouse' || !finePointer.matches) return;
+      state.hover = true;
+      render();
+    });
+    card.addEventListener('pointerleave', (e) => {
+      if (e.pointerType !== 'mouse') return;
+      state.hover = false;
+      state.hoverSuppressed = false;
+      render();
+    });
+
+    render();
+  }
+
+  document.querySelectorAll('[data-summary-card]').forEach(initSummaryCard);
+
+  // Don't run decorative loops in a background tab
+  const syncPageVisibility = () => summaryGridEl.classList.toggle('is-page-hidden', document.hidden);
+  document.addEventListener('visibilitychange', syncPageVisibility);
+  syncPageVisibility();
 
   // --- Init ----------------------------------------------------------------
 

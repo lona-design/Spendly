@@ -2,7 +2,7 @@
    PocketLog — Design System & UI Styles
    --------------------------------------------------------------------------
    COLOUR ROLES
-     --action-*     Forest green. ONLY .btn-primary: Add expense, Add your
+     --action-*     Rich violet. ONLY .btn-primary: Add expense, Add your
                     first expense, Save expense, Save changes.
      --accent-*     Muted plum. Selected non-category controls (active filter
                     selects), focus ring, small interaction states.
@@ -13,8 +13,10 @@
 
    BORDERS
      --border-subtle   Decorative: card outlines, row separators.
-     --border-control  Essential: inputs, selects, secondary buttons,
-                       menu triggers (>= 3:1 against adjacent surfaces).
+     --control-border-soft  Inputs, selects, secondary buttons and row
+                       menu triggers (light outline; labels, text and
+                       icons identify the control).
+     --filter-*        Toolbar search & filters (same light treatment).
 
    COMPONENT TYPES (deliberately different shapes)
      Buttons   8px radius, 44px tall, bold label. Primary / secondary /
@@ -45,13 +47,26 @@
   --text-primary: #20242C;
   --text-secondary: #626A76;
   --border-subtle: #E3E7EC;
-  --border-control: #7C838E;      /* darkened from #8B929D: >= 3.3:1 on every surface */
 
-  /* Primary actions */
-  --action-primary: #244B3B;
-  --action-primary-hover: #1D3F31;
-  --action-primary-pressed: #153025;
+  /* Brand mark */
+  --brand-primary: #6D28D9;
+  --brand-primary-hover: #5B21B6;
+  --brand-on-primary: #FFFFFF;
+  --brand-mark-size: 2.5rem;      /* 40px; 34px on phones */
+
+  /* Primary actions (rich violet) */
+  --action-primary: #6D28D9;
+  --action-primary-hover: #5B21B6;
+  --action-primary-pressed: #4C1D95;
   --action-on-primary: #FFFFFF;
+
+  /* Soft outlined controls: form fields, secondary buttons, row triggers */
+  --control-border-soft: #E2E6EC;
+  --control-border-soft-hover: #CBD2DC;
+  --control-icon: #4B5563;
+  --control-surface: #FFFFFF;
+  --control-surface-hover: #F5F3F8;
+  --control-focus: #6F617C;
 
   /* Secondary interaction */
   --accent-secondary: #6F617C;
@@ -85,6 +100,16 @@
   --filter-focus: #6F617C;
   --filter-focus-halo: rgba(111, 97, 124, 0.14);
 
+  /* Summary card effects */
+  --summary-surface: #FFFFFF;
+  --summary-surface-soft: #FAF8FC;
+  --summary-border: #E3E7EC;
+  --summary-text: #20242C;
+  --summary-text-muted: #626A76;
+  --summary-glow-primary: #9A82B1;
+  --summary-glow-secondary: #C9B7DF;
+  --summary-glow-soft: #E5DAEF;
+
   /* Summary card illustrations */
   --art-size: 2.75rem;          /* 44px */
   --art-size-sm: 2.25rem;       /* 36px */
@@ -95,6 +120,9 @@
   --duration-enter: 280ms;
   --duration-detail: 400ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Table rows */
+  --row-hover: #FAFAFC;
 
   /* Table header band */
   --table-header-bg: #F1F3F6;
@@ -113,7 +141,7 @@
   --weight-medium: 500;
   --weight-bold: 700;
 
-  --text-wordmark: 1.25rem;     /* 20px */
+  --text-wordmark: 1.375rem;    /* 22px */
   --text-metric: 2.25rem;       /* 36px */
   --text-metric-sm: 1.875rem;   /* 30px */
   --text-metric-secondary: 1.5rem; /* 24px */
@@ -252,19 +280,19 @@ svg {
   min-width: 0;
 }
 
-.brand-logo {
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: var(--radius-control);
-  background-color: var(--text-primary);
-  color: var(--surface-card);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* Brand mark: standalone violet monogram (no container) */
+.brand-mark {
+  display: block;
+  width: var(--brand-mark-size);
+  height: var(--brand-mark-size);
   flex-shrink: 0;
+  color: var(--brand-primary);
 }
 
 .brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -278,6 +306,7 @@ svg {
 .brand-tagline {
   font-size: var(--text-small);
   line-height: var(--leading-snug);
+  font-weight: var(--weight-regular);
   color: var(--text-secondary);
 }
 
@@ -309,15 +338,160 @@ svg {
    ========================================================================== */
 
 /* --- 4.1 Surfaces --- */
-.panel,
-.summary-card {
+.panel {
   background-color: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
 }
 
-/* --- 4.2 Summary cards --- */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- 4.2 Summary cards ------------------------------------------------------
+   Structure:  .summary-card (perspective, stationary hover region)
+                 .summary-card__rotator (preserve-3d, flips)
+                   .summary-card__face--front / --back (same grid cell)
+                     .summary-card__effects (glow → surface → blobs → veil)
+                     .summary-card__body (text, sits above effects)
+                 .summary-card__toggle (outside the rotator; never flips)
+   -------------------------------------------------------------------------- */
 .summary-card {
+  --summary-radius: 16px;
+  --summary-pad: var(--space-6);
+  --summary-toggle-space: 3.5rem;  /* reserved strip for the Details button */
+  --glow-delay: 0s;
+  --blob-delay-one: 0s;
+  --blob-delay-two: -3s;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  min-width: 0;
+  perspective: 1000px;
+  border-radius: var(--summary-radius);
+}
+
+.summary-card:nth-child(2) { --glow-delay: -2.7s; --blob-delay-one: -2.3s; --blob-delay-two: -6.1s; }
+.summary-card:nth-child(3) { --glow-delay: -5.3s; --blob-delay-one: -4.6s; --blob-delay-two: -1.4s; }
+
+.summary-card__rotator {
+  display: grid;
+  min-height: 11.5rem;             /* ~184px; grows with content */
+  transform-style: preserve-3d;
+  transition: transform 550ms cubic-bezier(.2, .7, .2, 1);
+}
+
+.summary-card.is-flipped .summary-card__rotator {
+  transform: rotateY(180deg);
+}
+
+.summary-card__face {
+  grid-area: 1 / 1;                /* faces overlap; the taller sets the height */
+  position: relative;
+  display: grid;
+  min-width: 0;
+  border-radius: var(--summary-radius);
+  box-shadow: 0 4px 16px rgba(32, 36, 44, 0.05);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.summary-card__face--front { transform: rotateY(0deg); }
+.summary-card__face--back  { transform: rotateY(180deg); }
+
+/* Decorative layers, clipped to the face. Its own background is the
+   resting perimeter colour; the rotating glow passes over it. */
+.summary-card__effects {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background-color: var(--summary-border);
+  pointer-events: none;
+}
+
+/* 1. Rotating perimeter glow: a soft strip through a square larger than
+      the card's diagonal, spun around the centre */
+.summary-card__glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(160%, 30rem);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(90deg,
+    transparent 36%,
+    var(--summary-glow-primary) 46%,
+    var(--summary-glow-secondary) 54%,
+    transparent 64%);
+  animation: pocketlog-glow-spin 8s linear infinite;
+  animation-delay: var(--glow-delay);
+  will-change: transform;
+}
+
+/* 2. Inset light surface: leaves a 2px perimeter for the glow */
+.summary-card__surface {
+  position: absolute;
+  inset: 2px;
+  overflow: hidden;                 /* 3. blobs clipped inside the surface */
+  border-radius: calc(var(--summary-radius) - 2px);
+  background: linear-gradient(160deg, var(--summary-surface) 0%, var(--summary-surface-soft) 100%);
+}
+
+.summary-card__blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(24px);
+  will-change: transform;
+}
+
+/* Plum, bottom-right: away from the figures */
+.summary-card__blob--one {
+  width: 110px;
+  height: 110px;
+  right: -28px;
+  bottom: -34px;
+  background-color: var(--summary-glow-primary);
+  opacity: 0.32;
+  animation: pocketlog-blob-drift 7s ease-in-out infinite;
+  animation-delay: var(--blob-delay-one);
+}
+
+/* Lavender, top-right corner behind the illustration */
+.summary-card__blob--two {
+  width: 140px;
+  height: 140px;
+  top: -64px;
+  right: -36px;
+  background-color: var(--summary-glow-secondary);
+  opacity: 0.4;
+  animation: pocketlog-blob-drift 10s ease-in-out infinite reverse;
+  animation-delay: var(--blob-delay-two);
+}
+
+/* 4. Readability veil behind the text column */
+.summary-card__veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg,
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(255, 255, 255, 0.8) 55%,
+    rgba(255, 255, 255, 0.35) 100%);
+}
+
+/* 5. Content */
+.summary-card__body {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   /* The illustration shares only the label row, so figures use the full width */
@@ -328,8 +502,77 @@ svg {
   align-content: start;
   column-gap: var(--space-4);
   row-gap: var(--space-1);
-  padding: var(--space-6);
   min-width: 0;
+  padding: var(--summary-pad) var(--summary-pad) var(--summary-toggle-space);
+  color: var(--summary-text);
+}
+
+.summary-card__face--back .summary-card__body {
+  grid-template-areas:
+    "label   label"
+    "value   value"
+    "caption caption";
+}
+
+.summary-card__explain {
+  grid-area: caption;
+  margin-top: var(--space-2);
+  font-size: var(--text-small);
+  line-height: var(--leading-normal);
+  color: var(--summary-text-muted);
+}
+
+/* Details / Back: outside the rotator, so it stays put and keeps focus */
+.summary-card__toggle {
+  position: absolute;
+  z-index: 2;
+  left: calc(var(--summary-pad) - var(--space-3));
+  bottom: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch-target);
+  padding: 0 var(--space-3);
+  font-size: var(--text-label);
+  font-weight: var(--weight-bold);
+  color: var(--summary-text);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-control);
+  transition: background-color var(--duration-base) var(--ease);
+}
+
+.summary-card__toggle svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--accent-secondary);
+}
+
+.summary-card__toggle:hover {
+  background-color: rgba(111, 97, 124, 0.08);
+}
+
+.summary-card__toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Page in a background tab: pause the decorative loops */
+.summary-grid.is-page-hidden .summary-card__glow,
+.summary-grid.is-page-hidden .summary-card__blob {
+  animation-play-state: paused;
+}
+
+@keyframes pocketlog-glow-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes pocketlog-blob-drift {
+  0%, 100% { transform: translate3d(-18px, -12px, 0) scale(1); }
+  25%      { transform: translate3d(20px, -4px, 0) scale(1.08); }
+  50%      { transform: translate3d(14px, 22px, 0) scale(0.96); }
+  75%      { transform: translate3d(-14px, 12px, 0) scale(1.04); }
 }
 
 .summary-label   { grid-area: label; align-self: center; }
@@ -395,11 +638,24 @@ svg {
 /* --- 4.3 Expenses panel --- */
 .panel-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-4);
   padding: var(--space-5) var(--space-6) 0;
+}
+
+.panel-header__aside {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-left: auto;
+}
+
+.btn-compact {
+  padding: 0 var(--space-3);
+  font-size: var(--text-label);
 }
 
 .section-title {
@@ -495,7 +751,7 @@ select {
   line-height: var(--leading-normal);
   color: var(--text-primary);
   background-color: var(--surface-card);
-  border: 1px solid var(--border-control);
+  border: 1px solid var(--control-border-soft);
   border-radius: var(--radius-control);
   -webkit-appearance: none;
   appearance: none;
@@ -646,13 +902,14 @@ select.filter-control {
 }
 
 .btn-primary {
+  transition: background-color 150ms var(--ease);
   background-color: var(--action-primary);
   color: var(--action-on-primary);
 }
 
 .btn-secondary {
-  background-color: var(--surface-card);
-  border-color: var(--border-control);
+  background-color: var(--control-surface);
+  border-color: var(--control-border-soft);
   color: var(--text-primary);
 }
 
@@ -679,17 +936,17 @@ select.filter-control {
   height: 1.25rem;
 }
 
-/* Three-dot trigger: always visible, neutral fill, real boundary */
+/* Three-dot trigger: always visible, white, soft outline, dark dots */
 .menu-trigger {
   width: var(--touch-target);
   height: var(--touch-target);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-control);
+  border: 1px solid var(--control-border-soft);
   border-radius: var(--radius-control);
-  background-color: var(--surface-card);
-  color: var(--text-primary);
+  background-color: var(--control-surface);
+  color: var(--control-icon);
   transition: background-color var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease);
 }
 
@@ -698,8 +955,23 @@ select.filter-control {
   height: 1.25rem;
 }
 
-/* --- 4.7 Expense table / rows --- */
+/* --- 4.7 Expense table / rows ---------------------------------------------
+   A real <table>. Rows are CSS grids so the same markup stacks on phones;
+   explicit ARIA roles keep table semantics when display is changed.
+   -------------------------------------------------------------------------- */
+.expense-table {
+  display: block;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
 .table-head,
+.expense-list {
+  display: block;
+}
+
+.table-head-row,
 .expense-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 10.5rem 8.5rem 9.5rem var(--touch-target);
@@ -708,44 +980,105 @@ select.filter-control {
   padding: 0 var(--space-6);
 }
 
-/* One continuous shaded band; columns & side padding shared with rows above */
+.table-head-row > th,
+.expense-item > td {
+  display: block;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  font-weight: inherit;
+}
+
+/* Sticky shaded band (one header; stays visible while the list scrolls) */
 .table-head {
-  padding-top: 0.875rem;      /* 14 + 20 + 14 = 48px at default text size */
-  padding-bottom: 0.875rem;
+  position: sticky;
+  top: 0;
+  z-index: 3;                 /* above rows; menus (fixed, z 1500) stay above it */
   font-size: var(--text-small);
-  line-height: 1.25rem;       /* 20px */
+  line-height: 1.25rem;
   font-weight: var(--weight-bold);
-  letter-spacing: normal;
   color: var(--table-header-text);
   background-color: var(--table-header-bg);
   border-bottom: 1px solid var(--table-header-border);
-  cursor: default;
 }
 
-.table-head .cell-amount {
-  font-size: inherit;
-  font-weight: inherit;
+.table-head-row > th {
+  display: flex;
+  align-items: center;
+  min-height: 3rem;           /* 48px band; grows with larger text */
+}
+
+.table-head-row > th.cell-amount  {
+  justify-content: flex-end;
+  font-size: inherit;          /* header label, not a row figure */
+  line-height: inherit;
+}
+.table-head-row > th.cell-actions { justify-content: center; }
+
+/* Sort control: a real button inside the <th> */
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 3rem;
+  padding: 0;
+  font: inherit;
   color: inherit;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  transition: color var(--duration-fast) var(--ease);
 }
 
-.table-head .cell-actions {
-  justify-self: center;       /* centred over the 44px three-dot buttons */
-  text-align: center;
+.sort-btn:hover {
+  color: var(--text-primary);
 }
 
-.expense-list {
-  list-style: none;
+.sort-icon {
+  width: 0.625rem;
+  height: 0.875rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
+
+.sort-icon__up,
+.sort-icon__down {
+  opacity: 0.35;
+  transition: opacity var(--duration-fast) var(--ease);
+}
+
+th[aria-sort="ascending"] .sort-btn,
+th[aria-sort="descending"] .sort-btn {
+  color: var(--accent-secondary-strong);
+}
+
+th[aria-sort="ascending"] .sort-icon__up,
+th[aria-sort="descending"] .sort-icon__down { opacity: 1; }
+
+th[aria-sort="ascending"] .sort-icon__down,
+th[aria-sort="descending"] .sort-icon__up { opacity: 0; }
 
 .expense-item {
   min-height: 4.25rem; /* 68px */
   padding-top: var(--space-3);
   padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--border-subtle);
+  transition: background-color var(--duration-fast) var(--ease);
 }
 
 .expense-item:last-child {
   border-bottom: none;
+}
+
+/* Scanning aid only (rows aren't clickable) */
+@media (hover: hover) and (pointer: fine) {
+  .expense-item:hover {
+    background-color: var(--row-hover);
+  }
 }
 
 .cell-desc {
@@ -756,13 +1089,13 @@ select.filter-control {
   overflow-wrap: anywhere;
 }
 
-.cell-meta {
-  display: contents;
-}
-
 .cell-category {
   display: flex;
   min-width: 0;
+}
+
+.expense-item > .cell-category {
+  display: flex;
 }
 
 .cell-date {
@@ -780,9 +1113,17 @@ select.filter-control {
   white-space: nowrap;
 }
 
+.expense-item > .cell-amount {
+  text-align: right;
+}
+
 .cell-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.expense-item > .cell-actions {
+  display: flex;
 }
 
 /* --- 4.8 Category badge (informational) --- */
@@ -895,6 +1236,13 @@ select.filter-control {
   transition: background-color var(--duration-fast) var(--ease);
 }
 
+.menu-item__meta {
+  margin-left: auto;
+  font-size: var(--text-small);
+  font-weight: var(--weight-regular);
+  color: var(--text-secondary);
+}
+
 .menu-item svg {
   width: 1rem;
   height: 1rem;
@@ -988,6 +1336,26 @@ dialog:not([open]) {
   padding-top: var(--space-2);
 }
 
+/* Duplicate mode: make it obvious this saves a new expense */
+.dialog-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  font-size: var(--text-label);
+  line-height: var(--leading-snug);
+  font-weight: var(--weight-medium);
+  color: var(--accent-secondary-strong);
+  background-color: var(--accent-secondary-soft);
+  border-radius: var(--radius-control);
+}
+
+.dialog-notice svg {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 1px;
+}
+
 .dialog-text {
   font-size: var(--text-label);
   line-height: var(--leading-normal);
@@ -1069,7 +1437,13 @@ dialog:not([open]) {
   border-radius: var(--radius-control);
   box-shadow: var(--shadow-menu);
   pointer-events: auto;
-  animation: fadeIn var(--duration-base) var(--ease);
+  animation: toastIn 180ms var(--ease-out);
+}
+
+.toast.is-leaving {
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 160ms var(--ease), transform 160ms var(--ease);
 }
 
 .toast-icon {
@@ -1094,6 +1468,11 @@ dialog:not([open]) {
   font-size: var(--text-label);
 }
 
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -1115,9 +1494,23 @@ dialog:not([open]) {
   outline-offset: 2px;
 }
 
+/* Form fields (Add & Edit share these): soft border, plum focus */
+input:not(.is-invalid):not(:disabled):not(.filter-control):hover,
+select:not(.is-invalid):not(:disabled):not(.filter-control):hover {
+  border-color: var(--control-border-soft-hover);
+}
+
 input:focus,
 select:focus {
-  border-color: var(--focus-ring);
+  border-color: var(--control-focus);
+}
+
+input:focus-visible,
+select:focus-visible,
+.menu-trigger:focus-visible,
+.btn-secondary:focus-visible {
+  outline: 2px solid var(--control-focus);
+  outline-offset: 2px;
 }
 
 .menu-item:focus-visible {
@@ -1128,12 +1521,15 @@ select:focus {
 .btn-primary:hover  { background-color: var(--action-primary-hover); }
 .btn-primary:active { background-color: var(--action-primary-pressed); }
 
-/* Secondary & icon */
+/* Secondary buttons & row triggers: lavender-grey wash, slightly stronger border */
 .btn-secondary:hover,
-.menu-trigger:hover { background-color: var(--surface-muted); }
+.menu-trigger:hover {
+  background-color: var(--control-surface-hover);
+  border-color: var(--control-border-soft-hover);
+}
 
 .btn-secondary:active,
-.menu-trigger:active { background-color: var(--disabled-background); }
+.menu-trigger:active { background-color: var(--accent-secondary-soft); }
 
 .btn-icon:hover,
 .btn-clear:hover { background-color: var(--surface-muted); color: var(--text-primary); }
@@ -1202,8 +1598,19 @@ select.is-invalid:focus-visible { outline-color: var(--danger); }
   box-shadow: inset 0 0 0 1px var(--danger);
 }
 
-/* Active filters: control stays white with dark text; a small dot on the
-   label plus the visible "Clear filters" button signal the state */
+/* Active Category / Date range: soft violet tint + border (text stays dark).
+   Also marked by a dot on the label and the visible "Clear filters" action,
+   so the state never relies on colour alone. */
+.field-filter.is-active select.filter-control {
+  background-color: var(--accent-secondary-soft);
+  border-color: var(--accent-secondary);
+  color: var(--text-primary);
+}
+
+.field-filter.is-active select.filter-control:not(.is-invalid):hover {
+  border-color: var(--accent-secondary-strong);
+}
+
 .field.is-active .field-label::after {
   content: "";
   width: 6px;
@@ -1245,28 +1652,25 @@ select.is-invalid:focus-visible { outline-color: var(--danger); }
     display: none;
   }
 
+  /* Stacked row from the same <tr>:
+       description ............ amount
+       [badge]  date ............. ⋯      */
   .expense-item {
-    grid-template-columns: minmax(0, 1fr) auto var(--touch-target);
+    grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-areas:
-      "desc amount actions"
-      "meta meta   actions";
-    column-gap: var(--space-4);
+      "desc desc amount"
+      "cat  date actions";
+    column-gap: var(--space-3);
     row-gap: var(--space-1);
     padding: var(--space-3) var(--space-4) var(--space-3) var(--space-6);
   }
 
-  .cell-desc    { grid-area: desc; }
-  .cell-amount  { grid-area: amount; }
-  .cell-actions { grid-area: actions; }
-
-  .cell-meta {
-    grid-area: meta;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-3);
-    min-width: 0;
-  }
+  /* Amount sits level with the first line even when a description wraps */
+  .cell-desc     { grid-area: desc; align-self: start; }
+  .cell-amount   { grid-area: amount; align-self: start; }
+  .cell-category { grid-area: cat; }
+  .cell-date     { grid-area: date; }
+  .cell-actions  { grid-area: actions; }
 }
 
 /* Phones */
@@ -1283,14 +1687,25 @@ select.is-invalid:focus-visible { outline-color: var(--danger); }
     width: 100%;
   }
 
+  .brand-mark {
+    --brand-mark-size: 2.125rem;
+  }
+
   .summary-grid {
     grid-template-columns: 1fr;
     gap: var(--space-3);
   }
 
   .summary-card {
-    padding: var(--space-4) var(--space-5);
+    --summary-pad: var(--space-5);
   }
+
+  .summary-card__rotator {
+    min-height: 0;
+  }
+
+  .summary-card__blob--one { width: 84px; height: 84px; }
+  .summary-card__blob--two { width: 108px; height: 108px; }
 
   .summary-card-primary .summary-value {
     font-size: var(--text-metric-sm);
@@ -1384,24 +1799,30 @@ select.is-invalid:focus-visible { outline-color: var(--danger); }
     width: 100%;
   }
 
+  /* Bottom-centre, clear of the screen edges and the home indicator */
   .toast-stack {
-    right: var(--space-3);
-    bottom: var(--space-3);
-    width: calc(100% - var(--space-6));
+    left: 0;
+    right: 0;
+    bottom: max(var(--space-4), env(safe-area-inset-bottom, 0px));
+    width: calc(100% - var(--space-8));
+    margin-inline: auto;
   }
 }
 
 /* Very narrow (e.g. 200% zoom on a phone): single-column rows */
 @media (max-width: 21em) { /* 336px: e.g. 200% zoom on a 390–672px screen */
   .expense-item {
-    grid-template-columns: minmax(0, 1fr) var(--touch-target);
     grid-template-areas:
-      "desc   desc"
-      "amount amount"
-      "meta   actions";
+      "desc   desc   desc"
+      "amount amount amount"
+      "cat    date   actions";
   }
 
-  .cell-amount {
+  .cell-date {
+    white-space: normal;
+  }
+
+  .expense-item > .cell-amount {
     text-align: left;
     white-space: normal;      /* wrap rather than truncate very large figures */
     overflow-wrap: anywhere;
@@ -1477,5 +1898,15 @@ select.is-invalid:focus-visible { outline-color: var(--danger); }
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  /* Summary cards: static glow & blobs, immediate detail change */
+  .summary-card__glow,
+  .summary-card__blob {
+    animation: none !important;
+  }
+
+  .summary-card__rotator {
+    transition: none !important;
   }
 }
